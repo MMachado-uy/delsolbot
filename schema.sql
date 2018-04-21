@@ -1,6 +1,11 @@
 CREATE TABLE podcasts (
-	id int primary key auto_increment,
-    archivo varchar(15) not null,
-    obs varchar(120)
-)
+	id INT PRIMARY KEY AUTO_INCREMENT,
+    archivo VARCHAR(15) NOT NULL,
+    obs VARCHAR(120)
+);
+
+CREATE TABLE sources (
+	id INT PRIMARY KEY AUTO_INCREMENT,
+    url VARCHAR(120)
+);
 
