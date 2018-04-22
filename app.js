@@ -119,6 +119,14 @@ function sendFeedToTelegram(feed) {
     })
 }
 
+///////////////////////////////////////////////
+//////////////  DATABASE ACCESS  //////////////
+///////////////////////////////////////////////
+
+/**
+ * Get a new database connection
+ * @returns {Promise} A new database connection, or error message
+ */
 function getConnection() {
     return new Promise((resolve, reject) => {
         var con = mysql.createConnection({
@@ -139,10 +147,21 @@ function getConnection() {
     })
 }
 
+/**
+ * Closes/destroys a database connection
+ * @param {Object} con - A database connection to close/destroy
+ */
 function closeConnection(con) {
     con.destroy();
 }
 
+/**
+ * Register in the database the upload response for each podcast
+ * @param {string} archivo - Name of the file to register
+ * @param {string} obs - A comment
+ * @param {boolean} exito - The status of the upload
+ * @returns {Promise} The rows affected by the insert, or error message
+ */
 function registerUpload(archivo, obs, exito) {
     return new Promise((resolve, reject) => {
         getConnection().then((con) => {
@@ -163,6 +182,10 @@ function registerUpload(archivo, obs, exito) {
     })
 }
 
+/**
+ * Get the RSS sources list
+ * @returns {Promise} The list of RSS sources url's, or error message
+ */
 function getRssList() {
     return new Promise((resolve, reject) => {
         getConnection().then((con) => {
@@ -182,6 +205,11 @@ function getRssList() {
     })
 }
 
+/**
+ * Get a single podcast upload status
+ * @param {string} name - The filename of the podcast to search
+ * @returns {Promise} The row representation of the status of the given podcast, or error message
+ */
 function getPodcastByName(name) {
     return new Promise((resolve, reject) => {
         getConnection().then((con) => {
@@ -202,6 +230,33 @@ function getPodcastByName(name) {
     })
 }
 
+/**
+ * Get the list of the failed uploads
+ * @returns {Promise} The list of the uploads rejected by Telegram, or error message
+ */
+function getFailedPodcasts() {
+    return new Promise((resolve, reject) => {
+        getConnection().then((con) => {
+            con.query({
+                sql: 'SELECT * FROM `podcasts` WHERE `pudo_subir` = 0',
+                timeout: 40000
+            }, (err, results) => {
+                closeConnection(con)
+
+                if (err) {
+                    reject(err)
+                } else {
+                    resulve(results)
+                }
+            })
+        })
+    })
+}
+
+/**
+ * Get the identifiers for the podcasts
+ * @returns {Promise} The stored podcasts, or error message
+ */
 function getStoredPodcasts() {
     return new Promise((resolve, reject) => {
         getConnection().then((con) => {
@@ -218,11 +273,5 @@ function getStoredPodcasts() {
                 }
             })
         })
-    })
-}
-
-function processTextMsg(rssItem) {
-    return new Promise((resolve, reject) => {
-
     })
 }
