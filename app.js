@@ -6,7 +6,7 @@ const eachOf        = require('async/eachOf');
 var CronJob         = require('cron').CronJob;
 var winston         = require('winston');
 
-new CronJob('0 0 * * * *', () => {
+new CronJob('0 * * * * *', () => {
     getFeed()
     .then((feed) => {
         return ignoreUploadedPodcasts(feed)
@@ -134,11 +134,12 @@ function sendFeedToTelegram(feed) {
  * @param {string} msg A message to output
  */
 function logger(success, msg) {
+    let timestamp = new Date().toUTCString()
     let logger = new (winston.Logger)({
         transports: [
             new winston.transports.Console({
                 timestamp: function() {
-                    return new Date().toUTCString();
+                    return timestamp;
                 },
                 formatter: function(options) {
                     return `>>>>>>>>>> ${options.timestamp()} - ${options.level.toUpperCase()} - ${options.message}`;
@@ -147,8 +148,12 @@ function logger(success, msg) {
             new winston.transports.File({ 
                 filename: 'log.log',
                 timestamp: function() {
-                    return new Date().toUTCString();
-                }
+                    return timestamp;
+                },
+                formatter: function(options) {
+                    return `>>>>>>>>>> ${options.timestamp()} - ${options.level.toUpperCase()} - ${options.message}`;
+                },
+                json: false
             })
         ]
     });
