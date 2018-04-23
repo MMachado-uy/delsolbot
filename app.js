@@ -145,7 +145,7 @@ function logger(success, msg) {
                     return new Date().toUTCString();
                 },
                 formatter: function(options) {
-                    return `>>>>>>>>>> ${options.timestamp()} - ${options.level.toUpperCase} - ${options.message}`;
+                    return `>>>>>>>>>> ${options.timestamp()} - ${options.level.toUpperCase()} - ${options.message}`;
                 }
             }),
             new winston.transports.File({ 
