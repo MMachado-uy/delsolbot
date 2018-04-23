@@ -133,7 +133,7 @@ function sendFeedToTelegram(feed) {
  * @param {string} msg A message to output
  */
 function logger(success, msg) {
-    let now = new Date().toLocaleString()
+    let now = new Date().toUTCString()
 
     if (!success) {
         console.log(`>>>>>>>>>> ${now} - ERROR - ${msg}`)
