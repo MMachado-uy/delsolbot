@@ -140,7 +140,15 @@ function sendFeedToTelegram(feed) {
 function logger(success, msg) {
     let logger = new (winston.Logger)({
         transports: [
-            new (winston.transports.File)({ 
+            new winston.transports.Console({
+                timestamp: function() {
+                    return new Date().toUTCString();
+                },
+                formatter: function(options) {
+                    return `>>>>>>>>>> ${options.timestamp()} - ${options.level.toUpperCase} - ${options.message}`;
+                }
+            }),
+            new winston.transports.File({ 
                 filename: 'log.log',
                 timestamp: function() {
                     return new Date().toUTCString();
