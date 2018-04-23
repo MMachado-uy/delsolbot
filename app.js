@@ -37,6 +37,7 @@ function ignoreUploadedPodcasts(feed) {
     return new Promise((resolve, reject) => {
         getStoredPodcasts()
         .then((storedPodcasts) => {
+
             for (let sp of storedPodcasts) {
                 for (let i = 0; i < feed.item.length; i++) {
                     let archivoFeed = feed.item[i].link[0].substring(feed.item[i].link[0].lastIndexOf("/") + 1, feed.item[i].link[0].lastIndexOf(".mp3"));
@@ -46,9 +47,10 @@ function ignoreUploadedPodcasts(feed) {
                 }
             }
             
-            if (feed.length) {
+            if (feed.item.length) {
                 resolve(feed);
             } else {
+                console.log('This error')
                 reject('Nothing to upload')
             }
         }).catch((error) => {
@@ -113,7 +115,7 @@ function sendFeedToTelegram(feed) {
                 return registerUpload(value.archivo, '', true)
             }).catch((err) => {
                 
-                logger(false, `${value.archivo} Failed to upload. ${err.error_code} - ${err.description}`)
+                logger(false, `${value.archivo} Failed to upload. ${err.response.data.error_code} - ${err.response.data.description}`)
                 registerUpload(value.archivo, '', false)
                 .then((err) => {
 
