@@ -50,7 +50,6 @@ function ignoreUploadedPodcasts(feed) {
             if (feed.item.length) {
                 resolve(feed);
             } else {
-                console.log('This error')
                 reject('Nothing to upload')
             }
         }).catch((error) => {
@@ -138,7 +137,7 @@ function logger(success, msg) {
     let now = new Date().toUTCString()
 
     if (!success) {
-        console.log(`>>>>>>>>>> ${now} - ERROR - ${msg}`)
+        console.log(`>>>>>>>>>> ${now} - ERROR   - ${msg}`)
     } else {
         console.log(`>>>>>>>>>> ${now} - SUCCESS - ${msg}`)
     }
