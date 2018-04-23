@@ -1,13 +1,10 @@
 const env           = require('dotenv').config().parsed;
 const axios         = require('axios');
 const parseString   = require('xml2js').parseString;
-const util          = require('util');
 const mysql         = require('mysql');
 const eachOf        = require('async/eachOf');
 var CronJob         = require('cron').CronJob;
 var winston         = require('winston');
-
-var connection;
 
 new CronJob('0 0 * * * *', () => {
     getFeed()
@@ -50,7 +47,7 @@ function ignoreUploadedPodcasts(feed) {
                     }
                 }
             }
-            
+
             if (feed.item.length) {
                 resolve(feed);
             } else {
@@ -94,11 +91,10 @@ function sendFeedToTelegram(feed) {
 
         eachOf(feedItems, (value, key, callback) => {
 
-            let content = 
-                `<b>${value.title}</b>\n${value.desc}`
-            content = content.substring(0, 197)
-            
-            if (content.length == 197) {
+            let content = `<b>${value.title}</b>\n${value.desc}`
+
+            if (content.length > 200) {
+                content = content.substring(0, 197)
                 content += '...'
             }
             content = encodeURI(content)
@@ -181,7 +177,7 @@ function getConnection() {
             password : env.DB_PASS,
             database : env.DB
         });
-    
+
         con.connect((err) => {
             if (err) {
                 reject(err);
