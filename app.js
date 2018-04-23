@@ -15,7 +15,7 @@ getFeed()
 }).then((feed) => {
     sendFeedToTelegram(feed)
 }).catch((error) => {
-    console.log(Date().toLocaleString() + ' >>>>>>> ' + error)
+    logger(false, error)
 })
 
 function getFeed(rssUri) {
@@ -46,7 +46,11 @@ function ignoreUploadedPodcasts(feed) {
                 }
             }
             
-            resolve(feed)
+            if (feed.length) {
+                resolve(feed);
+            } else {
+                reject('Nothing to upload')
+            }
         }).catch((error) => {
             reject(error);
         })
@@ -104,8 +108,12 @@ function sendFeedToTelegram(feed) {
             axios.post(connectcionUrl)
             .then((res)=> {
                 callback()
+                
+                logger(true, `${value.archivo} Uploaded`)
                 return registerUpload(value.archivo, '', true)
             }).catch((err) => {
+                
+                logger(false, `${value.archivo} Failed to upload. ${err.error_code} - ${err.description}`)
                 registerUpload(value.archivo, '', false)
                 .then((err) => {
 
@@ -117,6 +125,21 @@ function sendFeedToTelegram(feed) {
             resolve()
         })
     })
+}
+
+/**
+ * Logs the execution of the script
+ * @param {boolean} error The execution status 
+ * @param {string} msg A message to output
+ */
+function logger(success, msg) {
+    let now = new Date().toLocaleString()
+
+    if (!success) {
+        console.log(`>>>>>>>>>> ${now} - ERROR - ${msg}`)
+    } else {
+        console.log(`>>>>>>>>>> ${now} - SUCCESS - ${msg}`)
+    }
 }
 
 ///////////////////////////////////////////////
