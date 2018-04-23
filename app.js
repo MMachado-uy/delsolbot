@@ -9,7 +9,7 @@ var winston         = require('winston');
 
 var connection;
 
-new CronJob('0 * * * * *', () => {
+new CronJob('0 0 * * * *', () => {
     getFeed()
     .then((feed) => {
         return ignoreUploadedPodcasts(feed)
