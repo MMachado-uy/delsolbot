@@ -6,7 +6,7 @@ const eachOf        = require('async/eachOf');
 var CronJob         = require('cron').CronJob;
 var winston         = require('winston');
 
-new CronJob('0 * * * * *', () => {
+new CronJob('0 0 * * * *', () => {
     getFeed()
     .then((feed) => {
         return ignoreUploadedPodcasts(feed)
