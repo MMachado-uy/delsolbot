@@ -4,19 +4,23 @@ const parseString   = require('xml2js').parseString;
 const util          = require('util');
 const mysql         = require('mysql');
 const eachOf        = require('async/eachOf');
+var CronJob         = require('cron').CronJob;
+var winston         = require('winston');
 
 var connection;
 
-getFeed()
-.then((feed) => {
-    return ignoreUploadedPodcasts(feed)
-}).then((feed) =>{
-    return parseFeed(feed)
-}).then((feed) => {
-    sendFeedToTelegram(feed)
-}).catch((error) => {
-    logger(false, error)
-})
+new CronJob('0 * * * * *', () => {
+    getFeed()
+    .then((feed) => {
+        return ignoreUploadedPodcasts(feed)
+    }).then((feed) =>{
+        return parseFeed(feed)
+    }).then((feed) => {
+        sendFeedToTelegram(feed)
+    }).catch((error) => {
+        logger(false, error)
+    })
+}, null, true)
 
 function getFeed(rssUri) {
     return new Promise(function (resolve, reject) {
@@ -134,12 +138,21 @@ function sendFeedToTelegram(feed) {
  * @param {string} msg A message to output
  */
 function logger(success, msg) {
-    let now = new Date().toUTCString()
+    let logger = new (winston.Logger)({
+        transports: [
+            new (winston.transports.File)({ 
+                filename: 'log.log',
+                timestamp: function() {
+                    return new Date().toUTCString();
+                }
+            })
+        ]
+    });
 
-    if (!success) {
-        console.log(`>>>>>>>>>> ${now} - ERROR   - ${msg}`)
+    if (success) {
+        logger.log('info', msg)
     } else {
-        console.log(`>>>>>>>>>> ${now} - SUCCESS - ${msg}`)
+        logger.log('error', msg)
     }
 }
 
