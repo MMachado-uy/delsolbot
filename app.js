@@ -102,6 +102,8 @@ function sendFeedToTelegram(feed) {
             let connectcionUrl   = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio?`;
             connectcionUrl      += `chat_id=${env.CHANNEL}&`;
             connectcionUrl      += `audio=${value.url}&`;
+            connectcionUrl      += `performer=${feedTitle}&`;
+            connectcionUrl      += `title=${value.title}&`;
             connectcionUrl      += `disable_notification=true&`;
             connectcionUrl      += `parse_mode=html&`;
             connectcionUrl      += `caption=${content}`;
@@ -135,6 +137,8 @@ function sendFeedToTelegram(feed) {
  */
 function logger(success, msg) {
     let timestamp = new Date().toUTCString()
+    timestamp = timestamp.setHours(timestamp.getHours()-3)
+
     let logger = new (winston.Logger)({
         transports: [
             new winston.transports.Console({
@@ -159,6 +163,8 @@ function logger(success, msg) {
     });
 
     if (success) {
+        logger.log('notice', msg)
+    } else if (msg === 'Nothing to upload') {
         logger.log('info', msg)
     } else {
         logger.log('error', msg)
