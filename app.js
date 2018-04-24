@@ -22,14 +22,18 @@ new CronJob('0 0 * * * *', () => {
 function getFeed(rssUri) {
     return new Promise(function (resolve, reject) {
         axios.get('https://www.delsol.uy/feed/notoquennada')
-        .then(function(response) {
-            parseString(response.data, (err, result) => {
-                if (err) {
-                    reject(err)
-                } else {
-                    resolve(result.rss.channel[0])
-                }
-            })
+        .then((response) => {
+            if (response) {
+                parseString(response.data, (err, result) => {
+                    if (err) {
+                        reject(err)
+                    } else {
+                        resolve(result.rss.channel[0])
+                    }
+                })
+            } else {
+                reject('Unable to fetch feed')
+            }
         })
     })
 }
@@ -102,8 +106,8 @@ function sendFeedToTelegram(feed) {
             let connectcionUrl   = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio?`;
             connectcionUrl      += `chat_id=${env.CHANNEL}&`;
             connectcionUrl      += `audio=${value.url}&`;
-            connectcionUrl      += `performer=${feedTitle}&`;
-            connectcionUrl      += `title=${value.title}&`;
+            connectcionUrl      += `performer=${encodeURI(feedTitle)}&`;
+            connectcionUrl      += `title=${encodeURI(value.title)}&`;
             connectcionUrl      += `disable_notification=true&`;
             connectcionUrl      += `parse_mode=html&`;
             connectcionUrl      += `caption=${content}`;
@@ -115,7 +119,6 @@ function sendFeedToTelegram(feed) {
                 logger(true, `${value.archivo} Uploaded`)
                 return registerUpload(value.archivo, '', true)
             }).catch((err) => {
-                
                 logger(false, `${value.archivo} Failed to upload. ${err.response.data.error_code} - ${err.response.data.description}`)
                 registerUpload(value.archivo, '', false)
                 .then((err) => {
@@ -137,7 +140,6 @@ function sendFeedToTelegram(feed) {
  */
 function logger(success, msg) {
     let timestamp = new Date().toUTCString()
-    timestamp = timestamp.setHours(timestamp.getHours()-3)
 
     let logger = new (winston.Logger)({
         transports: [
@@ -162,12 +164,10 @@ function logger(success, msg) {
         ]
     });
 
-    if (success) {
-        logger.log('notice', msg)
-    } else if (msg === 'Nothing to upload') {
+    if (success || msg === 'Nothing to upload') {
         logger.log('info', msg)
     } else {
-        logger.log('error', msg)
+        logger.log('warn', msg)
     }
 }
 
