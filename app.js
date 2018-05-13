@@ -7,21 +7,48 @@ var CronJob         = require('cron').CronJob;
 var winston         = require('winston');
 
 new CronJob('0 0 * * * *', () => {
-    getFeed()
-    .then((feed) => {
-        return ignoreUploadedPodcasts(feed)
-    }).then((feed) =>{
-        return parseFeed(feed)
-    }).then((feed) => {
-        sendFeedToTelegram(feed)
-    }).catch((error) => {
-        logger(false, error)
-    })
+
+    main()
+
 }, null, true)
+
+/**
+ * Main Application logic
+ */
+function main() {
+    getRssList()
+    .then((res) => {
+        if (res.length) {
+            eachOf(res, (value, key, callback) => {
+                let { url, channel } = value;
+
+                getFeed(url)
+                .then((feed) => {
+                    return ignoreUploadedPodcasts(feed)
+                }).then((feed) => {
+                    return parseFeed(feed)
+                }).then((feed) => {
+                    sendFeedToTelegram(feed, channel)
+                }).catch((error) => {
+                    callback(error)
+                })
+
+                callback()
+            }, (err) => {
+                if (err) logger(false, `Some generic error situation going on here: ${err}`)
+            })
+        } else {
+            logger(false, 'No sources to retrieve')
+        }
+    })
+    .catch((err) => {
+        logger(false, `Database connection error: ${err.message}`)
+    })
+}
 
 function getFeed(rssUri) {
     return new Promise(function (resolve, reject) {
-        axios.get('https://www.delsol.uy/feed/notoquennada')
+        axios.get(rssUri)
         .then((response) => {
             if (response) {
                 parseString(response.data, (err, result) => {
@@ -88,7 +115,7 @@ function parseFeed(feed) {
     })
 }
 
-function sendFeedToTelegram(feed) {
+function sendFeedToTelegram(feed, channel) {
     return new Promise((resolve, reject) => {
         let feedTitle = feed.title;
         let feedItems = feed.parsedFeed;
@@ -104,7 +131,7 @@ function sendFeedToTelegram(feed) {
             content = encodeURI(content)
 
             let connectcionUrl   = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio?`;
-            connectcionUrl      += `chat_id=${env.CHANNEL}&`;
+            connectcionUrl      += `chat_id=${channel}&`;
             connectcionUrl      += `audio=${value.url}&`;
             connectcionUrl      += `performer=${encodeURI(feedTitle)}&`;
             connectcionUrl      += `title=${encodeURI(value.title)}&`;
@@ -132,6 +159,10 @@ function sendFeedToTelegram(feed) {
         })
     })
 }
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////  LOGGER  //////////////////////////////////    
+////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Logs the execution of the script
@@ -171,9 +202,9 @@ function logger(success, msg) {
     }
 }
 
-///////////////////////////////////////////////
-//////////////  DATABASE ACCESS  //////////////
-///////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////  DATABASE ACCESS  //////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Get a new database connection
@@ -242,7 +273,7 @@ function getRssList() {
     return new Promise((resolve, reject) => {
         getConnection().then((con) => {
             con.query({
-                sql: 'SELECT url FROM `sources`',
+                sql: 'SELECT url, channel FROM `sources`',
                 timeout: 40000
             }, (err, results) => {
                 closeConnection(con)
