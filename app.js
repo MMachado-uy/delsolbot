@@ -3,21 +3,38 @@ const axios         = require('axios');
 const parseString   = require('xml2js').parseString;
 const mysql         = require('mysql');
 const eachOf        = require('async/eachOf');
+
 var CronJob         = require('cron').CronJob;
 var winston         = require('winston');
+var fs              = require('fs');
+var http            = require('http');
 
-new CronJob('0 0 * * * *', () => {
-    getFeed()
-    .then((feed) => {
-        return ignoreUploadedPodcasts(feed)
-    }).then((feed) =>{
-        return parseFeed(feed)
-    }).then((feed) => {
-        sendFeedToTelegram(feed)
-    }).catch((error) => {
-        logger(false, error)
-    })
-}, null, true)
+// new CronJob('0 0 * * * *', () => {
+//     getFeed()
+//     .then((feed) => {
+//         return ignoreUploadedPodcasts(feed)
+//     }).then((feed) =>{
+//         return parseFeed(feed)
+//     }).then((feed) => {
+//         sendFeedToTelegram(feed)
+//     }).catch((error) => {
+//         logger(false, error)
+//     })
+// }, null, true)
+
+axios.get('https://cdn.dl.uy/solmp3/6175.mp3')
+.then((response) => {
+    let file = fs.createWriteStream('downloads/coso.mp3')
+    // response.data.pipe(file)
+ console.log("AXIOS response ", response);
+    // file.
+})
+
+let file = fs.createWriteStream('downloads/coso.mp3')
+http.get('http://cdn.dl.uy/solmp3/6175.mp3', (response) => {
+    console.log("http response ", response);
+    // response.pipe(file)
+})
 
 function getFeed(rssUri) {
     return new Promise(function (resolve, reject) {
@@ -111,11 +128,11 @@ function sendFeedToTelegram(feed) {
             axios.post(connectcionUrl)
             .then((res)=> {
                 callback()
-                
+
                 logger(true, `${value.archivo} Uploaded`)
                 return registerUpload(value.archivo, '', true)
             }).catch((err) => {
-                
+
                 logger(false, `${value.archivo} Failed to upload. ${err.response.data.error_code} - ${err.response.data.description}`)
                 registerUpload(value.archivo, '', false)
                 .then((err) => {
@@ -132,7 +149,7 @@ function sendFeedToTelegram(feed) {
 
 /**
  * Logs the execution of the script
- * @param {boolean} error The execution status 
+ * @param {boolean} error The execution status
  * @param {string} msg A message to output
  */
 function logger(success, msg) {
@@ -149,7 +166,7 @@ function logger(success, msg) {
                     return `>>>>>>>>>> ${options.timestamp()} - ${options.level.toUpperCase()} - ${options.message}`;
                 }
             }),
-            new winston.transports.File({ 
+            new winston.transports.File({
                 filename: 'log.log',
                 timestamp: function() {
                     return timestamp;
