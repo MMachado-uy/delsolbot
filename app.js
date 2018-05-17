@@ -17,31 +17,35 @@ new CronJob('0 0 * * * *', () => {
  */
 function main() {
     getRssList()
-    .then((res) => {
+    .then(res => {
         if (res.length) {
-            eachOf(res, (value, key, callback) => {
-                let { url, channel } = value;
+            return getStoredPodcasts()
+            .then(storedPodcasts => {
 
-                getFeed(url)
-                .then((feed) => {
-                    return ignoreUploadedPodcasts(feed)
-                }).then((feed) => {
-                    return parseFeed(feed)
-                }).then((feed) => {
-                    sendFeedToTelegram(feed, channel)
-                }).catch((error) => {
-                    callback(error)
+                eachOf(res, (value, key, callback) => {
+                    let { url, channel } = value;
+
+                    getFeed(url)
+                    .then(feed => {
+                        return ignoreUploadedPodcasts(feed)
+                    }).then(feed => {
+                        return parseFeed(feed)
+                    }).then(feed => {
+                        sendFeedToTelegram(feed, channel)
+                    }).catch((error) => {
+                        callback(error)
+                    })
+
+                    callback()
+                }, err => {
+                    if (err) logger(false, `Some generic error situation going on here: ${err}`)
                 })
-
-                callback()
-            }, (err) => {
-                if (err) logger(false, `Some generic error situation going on here: ${err}`)
             })
         } else {
             logger(false, 'No sources to retrieve')
         }
     })
-    .catch((err) => {
+    .catch(err => {
         logger(false, `Database connection error: ${err.message}`)
     })
 }
@@ -49,7 +53,7 @@ function main() {
 function getFeed(rssUri) {
     return new Promise(function (resolve, reject) {
         axios.get(rssUri)
-        .then((response) => {
+        .then(response => {
             if (response) {
                 parseString(response.data, (err, result) => {
                     if (err) {
@@ -67,26 +71,20 @@ function getFeed(rssUri) {
 
 function ignoreUploadedPodcasts(feed) {
     return new Promise((resolve, reject) => {
-        getStoredPodcasts()
-        .then((storedPodcasts) => {
-
-            for (let sp of storedPodcasts) {
-                for (let i = 0; i < feed.item.length; i++) {
-                    let archivoFeed = feed.item[i].link[0].substring(feed.item[i].link[0].lastIndexOf("/") + 1, feed.item[i].link[0].lastIndexOf(".mp3"));
-                    if (sp.archivo == archivoFeed) {
-                        feed.item.splice(i, 1);
-                    }
+        for (let sp of storedPodcasts) {
+            for (let i = 0; i < feed.item.length; i++) {
+                let archivoFeed = feed.item[i].link[0].substring(feed.item[i].link[0].lastIndexOf("/") + 1, feed.item[i].link[0].lastIndexOf(".mp3"));
+                if (sp.archivo == archivoFeed) {
+                    feed.item.splice(i, 1);
                 }
             }
+        }
 
-            if (feed.item.length) {
-                resolve(feed);
-            } else {
-                reject('Nothing to upload')
-            }
-        }).catch((error) => {
-            reject(error);
-        })
+        if (feed.item.length) {
+            resolve(feed);
+        } else {
+            reject('Nothing to upload')
+        }
     })
 }
 
@@ -140,20 +138,20 @@ function sendFeedToTelegram(feed, channel) {
             connectcionUrl      += `caption=${content}`;
 
             axios.post(connectcionUrl)
-            .then((res)=> {
+            .then(res => {
                 callback()
-                
+
                 logger(true, `${value.archivo} Uploaded`)
                 return registerUpload(value.archivo, '', true)
-            }).catch((err) => {
+            }).catch(err => {
                 logger(false, `${value.archivo} Failed to upload. ${err.response.data.error_code} - ${err.response.data.description}`)
                 registerUpload(value.archivo, '', false)
-                .then((err) => {
+                .then(err => {
 
                     callback(err)
                 })
             })
-        }, (err) => {
+        }, err => {
             if (err) reject(err)
             resolve()
         })
@@ -161,12 +159,12 @@ function sendFeedToTelegram(feed, channel) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////  LOGGER  //////////////////////////////////    
+////////////////////////////////////  LOGGER  //////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Logs the execution of the script
- * @param {boolean} error The execution status 
+ * @param {boolean} error The execution status
  * @param {string} msg A message to output
  */
 function logger(success, msg) {
@@ -182,7 +180,7 @@ function logger(success, msg) {
                     return `>>>>>>>>>> ${options.timestamp()} - ${options.level.toUpperCase()} - ${options.message}`;
                 }
             }),
-            new winston.transports.File({ 
+            new winston.transports.File({
                 filename: 'log.log',
                 timestamp: function() {
                     return timestamp;
@@ -220,7 +218,7 @@ function getConnection() {
             database : env.DB
         });
 
-        con.connect((err) => {
+        con.connect(err => {
             if (err) {
                 reject(err);
             } else {
@@ -247,7 +245,7 @@ function closeConnection(con) {
  */
 function registerUpload(archivo, obs, exito) {
     return new Promise((resolve, reject) => {
-        getConnection().then((con) => {
+        getConnection().then(con => {
             con.query({
                 sql: 'INSERT INTO `podcasts` (archivo, obs, pudo_subir) VALUES (?, ?, ?)',
                 timeout: 40000,
@@ -271,7 +269,7 @@ function registerUpload(archivo, obs, exito) {
  */
 function getRssList() {
     return new Promise((resolve, reject) => {
-        getConnection().then((con) => {
+        getConnection().then(con => {
             con.query({
                 sql: 'SELECT url, channel FROM `sources`',
                 timeout: 40000
@@ -295,7 +293,7 @@ function getRssList() {
  */
 function getPodcastByName(name) {
     return new Promise((resolve, reject) => {
-        getConnection().then((con) => {
+        getConnection().then(con => {
             con.query({
                 sql: 'SELECT * FROM `podcasts` WHERE `archivo` = ?',
                 timeout: 40000,
@@ -319,7 +317,7 @@ function getPodcastByName(name) {
  */
 function getFailedPodcasts() {
     return new Promise((resolve, reject) => {
-        getConnection().then((con) => {
+        getConnection().then(con => {
             con.query({
                 sql: 'SELECT * FROM `podcasts` WHERE `pudo_subir` = 0',
                 timeout: 40000
@@ -342,7 +340,7 @@ function getFailedPodcasts() {
  */
 function getStoredPodcasts() {
     return new Promise((resolve, reject) => {
-        getConnection().then((con) => {
+        getConnection().then(con => {
             con.query({
                 sql: 'SELECT id, archivo FROM `podcasts`',
                 timeout: 40000,
