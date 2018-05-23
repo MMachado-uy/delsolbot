@@ -28,18 +28,21 @@ var http            = require('http');
 
 // }, null, true)
 
-axios.get('https://cdn.dl.uy/solmp3/6649.mp3')
-.then((response) => {
-    let file = fs.createWriteStream('downloads/coso.mp3')
-    // response.data.pipe(file)
-    console.log("AXIOS response ", response);
-    // file.
-})
+// axios.get('https://cdn.dl.uy/solmp3/6649.mp3')
+// .then((response) => {
+//     let file = fs.createWriteStream('downloads/coso.mp3')
+//     // response.data.pipe(file)
+//     console.log("AXIOS response ", response);
+//     // file.
+// })
 
-let file = fs.createWriteStream('downloads/coso.mp3')
+var file = fs.createWriteStream('downloads/coso.mp3')
 http.get('http://cdn.dl.uy/solmp3/6649.mp3', (response) => {
     console.log("http response ", response);
-    // response.pipe(file)
+    response.pipe(file)
+    file.on('finish', () => {
+        console.log('Finished')
+    })
 })
 
 /**
