@@ -8,6 +8,7 @@ CREATE TABLE podcasts (
 
 CREATE TABLE sources (
 	id INT PRIMARY KEY AUTO_INCREMENT,
-    url VARCHAR(120)
+    url VARCHAR(120) NOT NULL,
+    channel varchar(120) NOT NULL
 );
 

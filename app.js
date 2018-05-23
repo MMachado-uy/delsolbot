@@ -22,57 +22,99 @@ var http            = require('http');
 //     })
 // }, null, true)
 
-axios.get('https://cdn.dl.uy/solmp3/6175.mp3')
+// new CronJob('0 0 * * * *', () => {
+
+//     main()
+
+// }, null, true)
+
+axios.get('https://cdn.dl.uy/solmp3/6649.mp3')
 .then((response) => {
     let file = fs.createWriteStream('downloads/coso.mp3')
     // response.data.pipe(file)
- console.log("AXIOS response ", response);
+    console.log("AXIOS response ", response);
     // file.
 })
 
 let file = fs.createWriteStream('downloads/coso.mp3')
-http.get('http://cdn.dl.uy/solmp3/6175.mp3', (response) => {
+http.get('http://cdn.dl.uy/solmp3/6649.mp3', (response) => {
     console.log("http response ", response);
     // response.pipe(file)
 })
 
+/**
+ * Main Application logic
+ */
+function main() {
+    getRssList()
+    .then(res => {
+        if (res.length) {
+            return getStoredPodcasts()
+            .then(storedPodcasts => {
+
+                eachOf(res, (value, key, callback) => {
+                    let { url, channel } = value;
+
+                    getFeed(url)
+                    .then(feed => {
+                        return ignoreUploadedPodcasts(feed)
+                    }).then(feed => {
+                        return parseFeed(feed)
+                    }).then(feed => {
+                        sendFeedToTelegram(feed, channel)
+                    }).catch((error) => {
+                        callback(error)
+                    })
+
+                    callback()
+                }, err => {
+                    if (err) logger(false, `Some generic error situation going on here: ${err}`)
+                })
+            })
+        } else {
+            logger(false, 'No sources to retrieve')
+        }
+    })
+    .catch(err => {
+        logger(false, `Database connection error: ${err.message}`)
+    })
+}
+
 function getFeed(rssUri) {
     return new Promise(function (resolve, reject) {
-        axios.get('https://www.delsol.uy/feed/notoquennada')
-        .then(function(response) {
-            parseString(response.data, (err, result) => {
-                if (err) {
-                    reject(err)
-                } else {
-                    resolve(result.rss.channel[0])
-                }
-            })
+        axios.get(rssUri)
+        .then(response => {
+            if (response) {
+                parseString(response.data, (err, result) => {
+                    if (err) {
+                        reject(err)
+                    } else {
+                        resolve(result.rss.channel[0])
+                    }
+                })
+            } else {
+                reject('Unable to fetch feed')
+            }
         })
     })
 }
 
 function ignoreUploadedPodcasts(feed) {
     return new Promise((resolve, reject) => {
-        getStoredPodcasts()
-        .then((storedPodcasts) => {
-
-            for (let sp of storedPodcasts) {
-                for (let i = 0; i < feed.item.length; i++) {
-                    let archivoFeed = feed.item[i].link[0].substring(feed.item[i].link[0].lastIndexOf("/") + 1, feed.item[i].link[0].lastIndexOf(".mp3"));
-                    if (sp.archivo == archivoFeed) {
-                        feed.item.splice(i, 1);
-                    }
+        for (let sp of storedPodcasts) {
+            for (let i = 0; i < feed.item.length; i++) {
+                let archivoFeed = feed.item[i].link[0].substring(feed.item[i].link[0].lastIndexOf("/") + 1, feed.item[i].link[0].lastIndexOf(".mp3"));
+                if (sp.archivo == archivoFeed) {
+                    feed.item.splice(i, 1);
                 }
             }
+        }
 
-            if (feed.item.length) {
-                resolve(feed);
-            } else {
-                reject('Nothing to upload')
-            }
-        }).catch((error) => {
-            reject(error);
-        })
+        if (feed.item.length) {
+            resolve(feed);
+        } else {
+            reject('Nothing to upload')
+        }
     })
 }
 
@@ -101,7 +143,7 @@ function parseFeed(feed) {
     })
 }
 
-function sendFeedToTelegram(feed) {
+function sendFeedToTelegram(feed, channel) {
     return new Promise((resolve, reject) => {
         let feedTitle = feed.title;
         let feedItems = feed.parsedFeed;
@@ -117,35 +159,38 @@ function sendFeedToTelegram(feed) {
             content = encodeURI(content)
 
             let connectcionUrl   = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio?`;
-            connectcionUrl      += `chat_id=${env.CHANNEL}&`;
+            connectcionUrl      += `chat_id=${channel}&`;
             connectcionUrl      += `audio=${value.url}&`;
-            connectcionUrl      += `performer=${feedTitle}&`;
-            connectcionUrl      += `title=${value.title}&`;
+            connectcionUrl      += `performer=${encodeURI(feedTitle)}&`;
+            connectcionUrl      += `title=${encodeURI(value.title)}&`;
             connectcionUrl      += `disable_notification=true&`;
             connectcionUrl      += `parse_mode=html&`;
             connectcionUrl      += `caption=${content}`;
 
             axios.post(connectcionUrl)
-            .then((res)=> {
+            .then(res => {
                 callback()
 
                 logger(true, `${value.archivo} Uploaded`)
                 return registerUpload(value.archivo, '', true)
-            }).catch((err) => {
-
+            }).catch(err => {
                 logger(false, `${value.archivo} Failed to upload. ${err.response.data.error_code} - ${err.response.data.description}`)
                 registerUpload(value.archivo, '', false)
-                .then((err) => {
+                .then(err => {
 
                     callback(err)
                 })
             })
-        }, (err) => {
+        }, err => {
             if (err) reject(err)
             resolve()
         })
     })
 }
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////  LOGGER  //////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Logs the execution of the script
@@ -154,7 +199,6 @@ function sendFeedToTelegram(feed) {
  */
 function logger(success, msg) {
     let timestamp = new Date().toUTCString()
-    timestamp = timestamp.setHours(timestamp.getHours()-3)
 
     let logger = new (winston.Logger)({
         transports: [
@@ -179,18 +223,16 @@ function logger(success, msg) {
         ]
     });
 
-    if (success) {
-        logger.log('notice', msg)
-    } else if (msg === 'Nothing to upload') {
+    if (success || msg === 'Nothing to upload') {
         logger.log('info', msg)
     } else {
-        logger.log('error', msg)
+        logger.log('warn', msg)
     }
 }
 
-///////////////////////////////////////////////
-//////////////  DATABASE ACCESS  //////////////
-///////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////  DATABASE ACCESS  //////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Get a new database connection
@@ -206,7 +248,7 @@ function getConnection() {
             database : env.DB
         });
 
-        con.connect((err) => {
+        con.connect(err => {
             if (err) {
                 reject(err);
             } else {
@@ -233,7 +275,7 @@ function closeConnection(con) {
  */
 function registerUpload(archivo, obs, exito) {
     return new Promise((resolve, reject) => {
-        getConnection().then((con) => {
+        getConnection().then(con => {
             con.query({
                 sql: 'INSERT INTO `podcasts` (archivo, obs, pudo_subir) VALUES (?, ?, ?)',
                 timeout: 40000,
@@ -257,9 +299,9 @@ function registerUpload(archivo, obs, exito) {
  */
 function getRssList() {
     return new Promise((resolve, reject) => {
-        getConnection().then((con) => {
+        getConnection().then(con => {
             con.query({
-                sql: 'SELECT url FROM `sources`',
+                sql: 'SELECT url, channel FROM `sources`',
                 timeout: 40000
             }, (err, results) => {
                 closeConnection(con)
@@ -281,7 +323,7 @@ function getRssList() {
  */
 function getPodcastByName(name) {
     return new Promise((resolve, reject) => {
-        getConnection().then((con) => {
+        getConnection().then(con => {
             con.query({
                 sql: 'SELECT * FROM `podcasts` WHERE `archivo` = ?',
                 timeout: 40000,
@@ -305,7 +347,7 @@ function getPodcastByName(name) {
  */
 function getFailedPodcasts() {
     return new Promise((resolve, reject) => {
-        getConnection().then((con) => {
+        getConnection().then(con => {
             con.query({
                 sql: 'SELECT * FROM `podcasts` WHERE `pudo_subir` = 0',
                 timeout: 40000
@@ -328,7 +370,7 @@ function getFailedPodcasts() {
  */
 function getStoredPodcasts() {
     return new Promise((resolve, reject) => {
-        getConnection().then((con) => {
+        getConnection().then(con => {
             con.query({
                 sql: 'SELECT id, archivo FROM `podcasts`',
                 timeout: 40000,
