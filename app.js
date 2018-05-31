@@ -31,17 +31,53 @@ var http            = require('http');
 // axios.get('https://cdn.dl.uy/solmp3/6649.mp3')
 // .then((response) => {
 //     let file = fs.createWriteStream('downloads/coso.mp3')
-//     // response.data.pipe(file)
+//     response.data.pipe(file)
 //     console.log("AXIOS response ", response);
-//     // file.
+//     file.
 // })
 
-var file = fs.createWriteStream('downloads/coso.mp3')
+let file = fs.createWriteStream('downloads/coso.mp3')
 http.get('http://cdn.dl.uy/solmp3/6649.mp3', (response) => {
     console.log("http response ", response);
     response.pipe(file)
-    file.on('finish', () => {
-        console.log('Finished')
+    file.on('finish', (res) => {
+        console.log('Finished', res);
+
+
+        // let content = `<b>${value.title}</b>\n${value.desc}`
+
+        // if (content.length > 200) {
+        //     content = content.substring(0, 197)
+        //     content += '...'
+        // }
+        // content = encodeURI(content)
+
+        // let connectcionUrl   = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio?`;
+        // connectcionUrl      += `chat_id=${channel}&`;
+        // connectcionUrl      += `audio=${value.url}&`;
+        // connectcionUrl      += `performer=${encodeURI(feedTitle)}&`;
+        // connectcionUrl      += `title=${encodeURI(value.title)}&`;
+        // connectcionUrl      += `disable_notification=true&`;
+        // connectcionUrl      += `parse_mode=html&`;
+        // connectcionUrl      += `caption=${content}`;
+
+        // axios.post(connectcionUrl)
+        // .then(res => {
+        //     callback()
+
+        //     logger(true, `${value.archivo} Uploaded`)
+        //     return registerUpload(value.archivo, '', true)
+        // }).catch(err => {
+        //     logger(false, `${value.archivo} Failed to upload. ${err.response.data.error_code} - ${err.response.data.description}`)
+        //     registerUpload(value.archivo, '', false)
+        //     .then(err => {
+
+        //         callback(err)
+        //     })
+        // })
+
+
+
     })
 })
 
