@@ -44,17 +44,36 @@ http.get('http://cdn.dl.uy/solmp3/6650.mp3', (response) => {
     file.on('finish', () => {
         console.log('Finished');
 
-        let data = new FormData();
-        data.append('audio', fs.createReadStream('downloads/coso.mp3'));
-        data.append('content', `<b>FINISHED!!!</b>`)
-        data.append(`chat_id`, `@delsoltest`);
-        data.append(`disable_notification`, `true`);
-        data.append(`parse_mode`, `html`);
+        // let file = fs.createReadStream('downloads/coso.mp3');
 
-        const config = {
-            headers: { 'content-type': 'Content-Type: audio/mpeg' },
-            maxContentLength: 52428890
-        }
+        fs.readFile('downloads/coso.mp3', 'binary', (err, data) => {
+            let payload = {
+                audio: data,
+                content: `<b>FINISHED!!!</b>`,
+                chat_id: `@delsoltest`,
+                disable_notification: `true`,
+                parse_mode: `html`
+            }
+    
+            let config = {
+                headers: { 'content-type': 'multipart/form-data' },
+                maxContentLength: 52428890
+            }
+            
+            let connectcionUrl   = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio`;
+
+            axios.post(connectcionUrl, payload, config)
+            .then(res => {
+                console.log('Done', res)
+            }).catch(err => {
+                console.log('Error', err)
+            })
+        });
+
+        // file.on('ready', () => {
+
+        // })
+
 
         // let content = `<b>FINISHED!!!</b>`
 
@@ -63,8 +82,6 @@ http.get('http://cdn.dl.uy/solmp3/6650.mp3', (response) => {
         //     content += '...'
         // }
         // content = encodeURI(content)
-
-        let connectcionUrl   = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio?`;
         // connectcionUrl      += `chat_id=@delsoltest&`;
         // connectcionUrl      += `audio=${value.url}&`;
         // connectcionUrl      += `performer=${encodeURI(feedTitle)}&`;
@@ -75,12 +92,6 @@ http.get('http://cdn.dl.uy/solmp3/6650.mp3', (response) => {
 
         // http.post(connectcionUrl, data, config, );
 
-        axios.post(connectcionUrl, data, config)
-        .then(res => {
-            console.log('Done', res)
-        }).catch(err => {
-            console.log('Error', err)
-        })
 
     })
 })
