@@ -9,6 +9,8 @@ var CronJob         = require('cron').CronJob;
 var winston         = require('winston');
 var fs              = require('fs');
 var http            = require('http');
+var querystring     = require('querystring');
+var request         = require('request');
 
 // new CronJob('0 0 * * * *', () => {
 //     getFeed()
@@ -37,38 +39,71 @@ var http            = require('http');
 //     file.
 // })
 
-let file = fs.createWriteStream('downloads/coso.mp3')
-http.get('http://cdn.dl.uy/solmp3/6650.mp3', (response) => {
-    console.log("http response ", response);
-    response.pipe(file)
-    file.on('finish', () => {
-        console.log('Finished');
+// let file = fs.createWriteStream('downloads/coso.mp3')
+// http.get('http://cdn.dl.uy/solmp3/6650.mp3', response => {
+//     response.pipe(file)
+    
+//     file.on('finish', () => {
+//         console.log('Finished');
 
-        // let file = fs.createReadStream('downloads/coso.mp3');
-
-        fs.readFile('downloads/coso.mp3', 'binary', (err, data) => {
+        // fs.readFile('downloads/19.mp3', 'binary', (err, data) => {
+            /**
+             * https://core.telegram.org/bots/api#sendaudio
+             */
             let payload = {
-                audio: data,
-                content: `<b>FINISHED!!!</b>`,
-                chat_id: `@delsoltest`,
-                disable_notification: `true`,
-                parse_mode: `html`
+                audio: fs.createReadStream('downloads/19.mp3'),
+                caption: `Finished`,
+                chat_id: `@delsoltest`
             }
     
-            let config = {
-                headers: { 'content-type': 'multipart/form-data' },
-                maxContentLength: 52428890
-            }
+            // let config = {
+            //     headers: { 'content-type': 'multipart/form-data' },
+            //     maxContentLength: 50 * 1024 * 1024
+            // }
             
             let connectcionUrl   = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio`;
+            
+            // var formData = {
+            //     audio: fs.createReadStream('downloads/19.mp3'),
+            //     caption: `Finished`,
+            //     chat_id: `@delsoltest`
+            // };
+            
+            request.post({
+                url:connectcionUrl, 
+                formData: payload
+            }, (err, httpResponse, body) => {
+                if (err) {
+                  return console.error('upload failed:', err);
+                }
+                console.log('Upload successful!  Server responded with:', body);
+            });
+            // axios({
+            //     data: {
+            //         audio: data,
+            //         chat_id: `@delsoltest`
+            //     },
+            //     headers: { 'content-type': 'multipart/form-data' },
+            //     maxContentLength: 50 * 1024 * 1024,
+            //     url: `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio`
+            // })
+            // .then(res => {
+            //     console.log('Finished')
+            // })
+            // .catch(error => {
+            //     console.log('Rejected', error)
+            // })
 
-            axios.post(connectcionUrl, payload, config)
-            .then(res => {
-                console.log('Done', res)
-            }).catch(err => {
-                console.log('Error', err)
-            })
-        });
+            // http.post(connectcionUrl, payload, config);
+
+            // axios.post(connectcionUrl, payload)
+            // .then(res => {
+            //     console.log('Terminado!');
+            //     // console.log('Done', res)
+            // }).catch(err => {
+            //     console.log('Error', err)
+            // })
+        // });
 
         // file.on('ready', () => {
 
@@ -91,10 +126,8 @@ http.get('http://cdn.dl.uy/solmp3/6650.mp3', (response) => {
         // connectcionUrl      += `caption=${content}`;
 
         // http.post(connectcionUrl, data, config, );
-
-
-    })
-})
+//     })
+// })
 
 /**
  * Main Application logic
