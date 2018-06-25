@@ -1,11 +1,8 @@
 {
   "name": "delsolbot",
-  "version": "1.0.0",
-  "description": "Integration between radio show RSS feed and Telegram bot to publish in public channel http://t.me/notoquennadatelegram",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "version": "1.3.1",
+  "description": "Integration between radio station RSS feeds and Telegram bot to publish in the corresponding Telegram channels",
+  "main": "app.js",
   "keywords": [
     "nodejs",
     "mysql",
@@ -13,7 +10,7 @@
     "telegram-bot-api",
     "telegram"
   ],
-  "author": "",
+  "author": "Mauricio Machado",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -25,9 +22,11 @@
     "cron": "^1.3.0",
     "dotenv": "^5.0.1",
     "form-data": "^2.3.2",
+    "musicmetadata": "^2.0.5",
     "mysql": "^2.15.0",
     "node-id3": "^0.1.5",
     "request": "^2.87.0",
+    "request-promise-native": "^1.0.5",
     "winston": "^2.4.2",
     "xml2js": "^0.4.19"
   }

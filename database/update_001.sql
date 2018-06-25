@@ -1,0 +1,5 @@
+ALTER TABLE sources
+    ADD COLUMN nombre VARCHAR(80)
+
+ALTER TABLE podcasts
+    ADD COLUMN file_id VARCHAR(50);

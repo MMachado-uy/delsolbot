@@ -3,14 +3,23 @@ const axios         = require('axios');
 const parseString   = require('xml2js').parseString;
 const mysql         = require('mysql');
 const eachOf        = require('async/eachOf');
-var FormData = require('form-data');
+const NodeID3       = require('node-id3')
 
 var CronJob         = require('cron').CronJob;
 var winston         = require('winston');
 var fs              = require('fs');
+var request         = require('request');
+var requestP        = require('request-promise-native');
 var http            = require('http');
 var querystring     = require('querystring');
-var request         = require('request');
+var FormData        = require('form-data');
+var mm              = require('musicmetadata');
+
+const COVER = fs.createReadStream('./assets/cover_mundial.jpg')
+
+/**
+ * https://core.telegram.org/bots/api#sendaudio
+ */
 
 // new CronJob('0 0 * * * *', () => {
 //     getFeed()
@@ -31,103 +40,48 @@ var request         = require('request');
 
 // }, null, true)
 
-// axios.get('https://cdn.dl.uy/solmp3/6649.mp3')
-// .then((response) => {
-//     let file = fs.createWriteStream('downloads/coso.mp3')
-//     response.data.pipe(file)
-//     console.log("AXIOS response ", response);
-//     file.
-// })
+// request.get('http://cdn.dl.uy/solmp3/6652.mp3',(error, response, body) => {
+//     if (!error) {
 
-// let file = fs.createWriteStream('downloads/coso.mp3')
-// http.get('http://cdn.dl.uy/solmp3/6650.mp3', response => {
-//     response.pipe(file)
+//         let tags = {
+//             artist: 'Del Sol Test',
+//             title: 'Track de prueba',
+//             comment: 'blabla',
+//             APIC: './assets/cover_mundial.jpg'
+//         }
+
+//         NodeID3.write(tags, 'downloads/coso.mp3', (err, buffer) => {
+//             let meta = NodeID3.read('downloads/coso.mp3')
+//             console.log(meta)
+
+//             let payload = {
+//                 audio: fs.createReadStream('downloads/coso.mp3'),
+//                 caption: `Finished`,
+//                 chat_id: `@delsoltest`
+//             }
     
-//     file.on('finish', () => {
-//         console.log('Finished');
-
-        // fs.readFile('downloads/19.mp3', 'binary', (err, data) => {
-            /**
-             * https://core.telegram.org/bots/api#sendaudio
-             */
-            let payload = {
-                audio: fs.createReadStream('downloads/19.mp3'),
-                caption: `Finished`,
-                chat_id: `@delsoltest`
-            }
+//             let connectcionUrl   = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio`;
     
-            // let config = {
-            //     headers: { 'content-type': 'multipart/form-data' },
-            //     maxContentLength: 50 * 1024 * 1024
-            // }
-            
-            let connectcionUrl   = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio`;
-            
-            // var formData = {
-            //     audio: fs.createReadStream('downloads/19.mp3'),
-            //     caption: `Finished`,
-            //     chat_id: `@delsoltest`
-            // };
-            
-            request.post({
-                url:connectcionUrl, 
-                formData: payload
-            }, (err, httpResponse, body) => {
-                if (err) {
-                  return console.error('upload failed:', err);
-                }
-                console.log('Upload successful!  Server responded with:', body);
-            });
-            // axios({
-            //     data: {
-            //         audio: data,
-            //         chat_id: `@delsoltest`
-            //     },
-            //     headers: { 'content-type': 'multipart/form-data' },
-            //     maxContentLength: 50 * 1024 * 1024,
-            //     url: `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio`
-            // })
-            // .then(res => {
-            //     console.log('Finished')
-            // })
-            // .catch(error => {
-            //     console.log('Rejected', error)
-            // })
+//             requestP.post({
+//                 url:connectcionUrl, 
+//                 formData: payload
+//             })
+//             .then(() => {
+    
+//                 fs.unlinkSync('downloads/coso.mp3');
+//             })
+//             .catch(err => {
+//                 logger(false, `Failed to upload. Response: ${body}`)
+//             })
+//         })
 
-            // http.post(connectcionUrl, payload, config);
-
-            // axios.post(connectcionUrl, payload)
-            // .then(res => {
-            //     console.log('Terminado!');
-            //     // console.log('Done', res)
-            // }).catch(err => {
-            //     console.log('Error', err)
-            // })
-        // });
-
-        // file.on('ready', () => {
-
-        // })
-
-
-        // let content = `<b>FINISHED!!!</b>`
-
-        // if (content.length > 200) {
-        //     content = content.substring(0, 197)
-        //     content += '...'
-        // }
-        // content = encodeURI(content)
-        // connectcionUrl      += `chat_id=@delsoltest&`;
-        // connectcionUrl      += `audio=${value.url}&`;
-        // connectcionUrl      += `performer=${encodeURI(feedTitle)}&`;
-        // connectcionUrl      += `title=${encodeURI(value.title)}&`;
-        // connectcionUrl      += `disable_notification=true&`;
-        // connectcionUrl      += `parse_mode=html&`;
-        // connectcionUrl      += `caption=${content}`;
-
-        // http.post(connectcionUrl, data, config, );
-//     })
+//     } else {
+//         logger(false, `Failed to upload. Response: ${body}`)
+//     }
 // })
+// .pipe(fs.createWriteStream('downloads/coso.mp3'))
+
+main()
 
 /**
  * Main Application logic
@@ -148,7 +102,7 @@ function main() {
                     }).then(feed => {
                         return parseFeed(feed)
                     }).then(feed => {
-                        sendFeedToTelegram(feed, channel)
+                        return sendFeedToTelegram(feed, channel)
                     }).catch((error) => {
                         callback(error)
                     })
@@ -238,6 +192,7 @@ function sendFeedToTelegram(feed, channel) {
         eachOf(feedItems, (value, key, callback) => {
 
             let content = `<b>${value.title}</b>\n${value.desc}`
+            let episodePath = `downloads/${value.title}.mp3`;
 
             if (content.length > 200) {
                 content = content.substring(0, 197)
@@ -245,29 +200,29 @@ function sendFeedToTelegram(feed, channel) {
             }
             content = encodeURI(content)
 
-            let connectcionUrl   = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio?`;
-            connectcionUrl      += `chat_id=${channel}&`;
-            connectcionUrl      += `audio=${value.url}&`;
-            connectcionUrl      += `performer=${encodeURI(feedTitle)}&`;
-            connectcionUrl      += `title=${encodeURI(value.title)}&`;
-            connectcionUrl      += `disable_notification=true&`;
-            connectcionUrl      += `parse_mode=html&`;
-            connectcionUrl      += `caption=${content}`;
-
-            axios.post(connectcionUrl)
-            .then(res => {
-                callback()
-
+            downloadEpisode(value.url)
+            .then((episodePath) => {
+                return editMetadata(feedTitle, value.title, content, episodePath)
+            }).then((episodePath) => {
+                return sendEpisodeToChannel(episodePath, content, channel, feedTitle, value.title)
+            }).then(() => {
                 logger(true, `${value.archivo} Uploaded`)
                 return registerUpload(value.archivo, '', true)
-            }).catch(err => {
+            })
+            .then(() => {
+                callback()
+            }).catch((err) => {
                 logger(false, `${value.archivo} Failed to upload. ${err.response.data.error_code} - ${err.response.data.description}`)
                 registerUpload(value.archivo, '', false)
                 .then(err => {
-
+                    callback(err)
+                })
+                .catch(err => {
                     callback(err)
                 })
             })
+
+            fs.unlinkSync(episodePath)
         }, err => {
             if (err) reject(err)
             resolve()
@@ -275,9 +230,70 @@ function sendFeedToTelegram(feed, channel) {
     })
 }
 
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////  LOGGER  //////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
+function downloadEpisode(episodeUrl, title, episodePath) {
+    return new Promise((resolve, reject) => {
+        request.get(episodeUrl, (error, response, body) => {
+            if (!error) {
+                if (typeof body.ok )
+                resolve()
+            } else {
+                reject('Connection error')
+            }
+        })
+        .pipe(fs.createWriteStream(episodePath))
+    })
+}
+
+function editMetadata(artist, title, comment, episodePath) {
+    return new Promise((resolve, reject) => {
+        let tags = {
+            artist,
+            title,
+            comment,
+            APIC: './assets/cover_mundial.jpg'
+        }
+
+        NodeID3.write(tags, episodePath, (err, buffer) => {
+            if (!err) {
+                resolve(episodePath)
+            } else {
+                reject()
+            }
+        })
+    })
+}
+
+function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
+    return new Promise ((resolve, reject) => {
+
+        let payload = {
+            audio: fs.createReadStream(episodePath),
+            disable_notification: true,
+            parse_mode: 'html',
+            caption,
+            chat_id: '@delsoltest',
+            performer,
+            title
+        }
+
+        let connectcionUrl   = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio`;
+
+        requestP.post({
+            url:connectcionUrl, 
+            formData: payload
+        })
+        .then(() => {
+            resolve()
+        })
+        .catch(err => {
+            reject(err)
+        })
+    })
+}
+
+/******************************************************************************/
+/***********************************  LOGGER  *********************************/
+/******************************************************************************/
 
 /**
  * Logs the execution of the script
@@ -317,9 +333,9 @@ function logger(success, msg) {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////  DATABASE ACCESS  //////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
+/******************************************************************************/
+/******************************  DATABASE ACCESS  *****************************/
+/******************************************************************************/
 
 /**
  * Get a new database connection
