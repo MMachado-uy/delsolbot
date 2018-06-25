@@ -1,100 +1,44 @@
-const env           = require('dotenv').config().parsed;
-const axios         = require('axios');
-const parseString   = require('xml2js').parseString;
-const mysql         = require('mysql');
-const eachOf        = require('async/eachOf');
+const env           = require('dotenv').config().parsed
+const parseString   = require('xml2js').parseString
+const mysql         = require('mysql')
+const eachOf        = require('async/eachOf')
 const NodeID3       = require('node-id3')
+const { 
+    createLogger, 
+    format, 
+    transports }    = require('winston')
+const { 
+    combine, 
+    timestamp,
+    printf }        = format
 
-var CronJob         = require('cron').CronJob;
-var winston         = require('winston');
-var fs              = require('fs');
-var request         = require('request');
-var requestP        = require('request-promise-native');
-var http            = require('http');
-var querystring     = require('querystring');
-var FormData        = require('form-data');
-var mm              = require('musicmetadata');
+
+var CronJob         = require('cron').CronJob
+var fs              = require('fs')
+var request         = require('request')
+var requestP        = require('request-promise-native')
 
 const COVER = './assets/cover_mundial.jpg'
+const DDIR  = './downloads/'
 
-/**
- * https://core.telegram.org/bots/api#sendaudio
- */
-
-// new CronJob('0 0 * * * *', () => {
-//     getFeed()
-//     .then((feed) => {
-//         return ignoreUploadedPodcasts(feed)
-//     }).then((feed) =>{
-//         return parseFeed(feed)
-//     }).then((feed) => {
-//         sendFeedToTelegram(feed)
-//     }).catch((error) => {
-//         logger(false, error)
-//     })
-// }, null, true)
-
-// new CronJob('0 0 * * * *', () => {
-
-//     main()
-
-// }, null, true)
-
-// request.get('http://cdn.dl.uy/solmp3/6652.mp3',(error, response, body) => {
-//     if (!error) {
-
-//         let tags = {
-//             artist: 'Del Sol Test',
-//             title: 'Track de prueba',
-//             comment: 'blabla',
-//             APIC: './assets/cover_mundial.jpg'
-//         }
-
-//         NodeID3.write(tags, 'downloads/coso.mp3', (err, buffer) => {
-//             let meta = NodeID3.read('downloads/coso.mp3')
-//             console.log(meta)
-
-//             let payload = {
-//                 audio: fs.createReadStream('downloads/coso.mp3'),
-//                 caption: `Finished`,
-//                 chat_id: `@delsoltest`
-//             }
-    
-//             let connectcionUrl   = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio`;
-    
-//             requestP.post({
-//                 url:connectcionUrl, 
-//                 formData: payload
-//             })
-//             .then(() => {
-    
-//                 fs.unlinkSync('downloads/coso.mp3');
-//             })
-//             .catch(err => {
-//                 logger(false, `Failed to upload. Response: ${body}`)
-//             })
-//         })
-
-//     } else {
-//         logger(false, `Failed to upload. Response: ${body}`)
-//     }
-// })
-// .pipe(fs.createWriteStream('downloads/coso.mp3'))
-
-main()
+new CronJob('0 0 * * * *', () => {
+    main()
+}, null, true)
 
 /**
  * Main Application logic
  */
 function main() {
-    getRssList()
-    .then(res => {
+    cleanDownloads()
+    .then(() => {
+       return getRssList()  
+    }).then(res => {
         if (res.length) {
             return getStoredPodcasts()
             .then(storedPodcasts => {
 
                 eachOf(res, (value, key, callback) => {
-                    let { url, channel } = value;
+                    let { url, channel } = value
 
                     getFeed(url)
                     .then(feed => {
@@ -116,26 +60,27 @@ function main() {
         } else {
             logger(false, 'No sources to retrieve')
         }
-    })
-    .catch(err => {
+    }).catch(err => {
         logger(false, `Database connection error: ${err.message}`)
     })
 }
 
 function getFeed(rssUri) {
-    return new Promise(function (resolve, reject) {
-        axios.get(rssUri)
+    return new Promise((resolve, reject) => {
+
+        requestP(rssUri)
         .then(response => {
+
             if (response) {
-                parseString(response.data, (err, result) => {
+                parseString(response, (err, result) => {
                     if (err) {
-                        reject(err)
+                        reject(['getFeed', err])
                     } else {
                         resolve(result.rss.channel[0])
                     }
                 })
             } else {
-                reject('Unable to fetch feed')
+                reject(['getFeed', 'Unable to fetch feed'])
             }
         })
     })
@@ -145,26 +90,27 @@ function ignoreUploadedPodcasts(feed, storedPodcasts) {
     return new Promise((resolve, reject) => {
         for (let sp of storedPodcasts) {
             for (let i = 0; i < feed.item.length; i++) {
-                let archivoFeed = feed.item[i].link[0].substring(feed.item[i].link[0].lastIndexOf("/") + 1, feed.item[i].link[0].lastIndexOf(".mp3"));
+                let archivoFeed = feed.item[i].link[0].substring(feed.item[i].link[0].lastIndexOf("/") + 1, feed.item[i].link[0].lastIndexOf(".mp3"))
+
                 if (sp.archivo == archivoFeed) {
-                    feed.item.splice(i, 1);
+                    feed.item.splice(i, 1)
                 }
             }
         }
 
         if (feed.item.length) {
-            resolve(feed);
+            resolve(feed)
         } else {
-            reject('Nothing to upload')
+            resolve(feed)
         }
     })
 }
 
 function parseFeed(feed) {
     return new Promise((resolve, reject) => {
-        let rawFeed = feed.item;
-        let parsedFeed = [];
-        let title = feed.title[0];
+        let rawFeed = feed.item
+        let parsedFeed = []
+        let title = feed.title[0]
 
         for (let item of rawFeed) {
             let parsedItem = {
@@ -174,26 +120,26 @@ function parseFeed(feed) {
                 archivo: item.link[0].substring(item.link[0].lastIndexOf("/") + 1, item.link[0].lastIndexOf(".mp3"))
             }
 
-            parsedFeed.push(parsedItem);
+            parsedFeed.push(parsedItem)
         }
 
         if (parsedFeed.length) {
-            resolve({title,parsedFeed});
+            resolve({title,parsedFeed})
         } else {
-            reject('Nothing to upload')
+            reject(['parseFeed', 'Nothing to upload'])
         }
     })
 }
 
 function sendFeedToTelegram(feed, channel) {
     return new Promise((resolve, reject) => {
-        let feedTitle = feed.title;
-        let feedItems = feed.parsedFeed;
+        let feedTitle = feed.title
+        let feedItems = feed.parsedFeed
 
         eachOf(feedItems, (value, key, callback) => {
 
-            let content = `<b>${sanitizeContent(value.title)}</b>\n${sanitizeContent(value.desc)}`
-            let episodePath = `downloads/${sanitizeEpisode(value.title)}.mp3`
+            let content = `<b>${value.title}</b>\n${value.desc}`
+            let episodePath = `${DDIR}${sanitizeEpisode(value.title)}.mp3`
 
             if (content.length > 200) {
                 content = content.substring(0, 197)
@@ -205,14 +151,14 @@ function sendFeedToTelegram(feed, channel) {
                 return editMetadata(feedTitle, value.title, content, episodePath)
             }).then((episodePath) => {
                 return sendEpisodeToChannel(episodePath, content, channel, feedTitle, value.title)
-            }).then(() => {
+            }).then((file_id) => {
                 logger(true, `${value.archivo} Uploaded`)
-                return registerUpload(value.archivo, '', true)
+                return registerUpload(value.archivo, '', true, file_id)
             }).then(() => {
                 callback()
             }).catch((err) => {
                 logger(false, `${value.archivo} Failed to upload. ${err}`)
-                registerUpload(value.archivo, '', false)
+                registerUpload(value.archivo, err, false, '')
                 .then(err => {
                     callback(err)
                 })
@@ -220,10 +166,12 @@ function sendFeedToTelegram(feed, channel) {
                     callback(err)
                 })
             })
-
         }, err => {
-            if (err) reject(err)
-            resolve()
+            if (err) {
+                reject(['sendFeedToTelegram', err])
+            } else {
+                resolve()
+            }
         })
     })
 }
@@ -232,13 +180,12 @@ function downloadEpisode(episodeUrl, episodePath) {
     return new Promise((resolve, reject) => {
         let stream = fs.createWriteStream(episodePath)
 
-        console.log("episodePath downloadEpisode ", episodePath)
         request.get(episodeUrl, (error, response, body) => {
             if (!error) {
-                stream.close();
+                stream.close()
                 resolve(episodePath)
             } else {
-                reject('Connection error')
+                reject(['downloadEpisode', 'Connection error'])
             }
         })
         .pipe(stream)
@@ -247,7 +194,6 @@ function downloadEpisode(episodeUrl, episodePath) {
 
 function editMetadata(artist, title, comment, episodePath) {
     return new Promise((resolve, reject) => {
-        console.log("episodePath editMetadata ", episodePath);
         let tags = {
             artist,
             title,
@@ -255,13 +201,11 @@ function editMetadata(artist, title, comment, episodePath) {
             APIC: COVER
         }
 
-        console.log("tags ", tags);
-        console.log("episodePath ", episodePath);
         NodeID3.write(tags, episodePath, (err, buffer) => {
             if (!err) {
                 resolve(episodePath)
             } else {
-                reject()
+                reject(['editMetadata', err])
             }
         })
     })
@@ -269,9 +213,6 @@ function editMetadata(artist, title, comment, episodePath) {
 
 function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
     return new Promise ((resolve, reject) => {
-        console.log("episodePath sendEpisodeToChannel ", episodePath);
-        
-        console.log("fs.createReadStream(episodePath) ", typeof fs.createReadStream(episodePath));
         let payload = {
             audio: fs.createReadStream(episodePath),
             disable_notification: 'true',
@@ -282,25 +223,22 @@ function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
             title
         }
         
-        let connectcionUrl   = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio`;
-        console.log("episodePath ", typeof episodePath);
-        console.log("payload ", typeof payload);
-        console.log("connectcionUrl ", typeof connectcionUrl);
+        let connectcionUrl   = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio`
 
         requestP.post({
             url: connectcionUrl, 
             formData: payload,
             json: true
-        }).then(() => {
+        }).then((res) => {
             fs.unlink(episodePath, err => {
                 if (err) {
-                    reject(err)
+                    reject(['sendEpisodeToChannel', err])
                 } else {
-                    resolve()
+                    resolve(res.result.audio.file_id)
                 }
             })
         }).catch(err => {
-            reject(err)
+            reject(['sendEpisodeToChannel', err.message])
         })
     })
 }
@@ -317,6 +255,26 @@ function sanitizeContent(episodeContent) {
             .replace(new RegExp('>','g'),'&gt;')
 }
 
+function cleanDownloads() {
+    return new Promise((resolve, reject) => {
+
+        fs.readdir(DDIR, (err, files) => {
+
+            if (err) {
+                reject(['cleanDownloads', err])
+            } else {
+                files.forEach(file => {
+                    if (file !== '.gitkeep') {
+                        fs.unlinkSync(`${DDIR}${file}`)
+                    }
+                })
+
+                resolve()
+            }
+        })
+    })
+}
+
 /******************************************************************************/
 /***********************************  LOGGER  *********************************/
 /******************************************************************************/
@@ -327,30 +285,22 @@ function sanitizeContent(episodeContent) {
  * @param {string} msg A message to output
  */
 function logger(success, msg) {
-    let timestamp = new Date().toUTCString()
+    //let timestamp = new Date().toUTCString()
 
-    let logger = new (winston.Logger)({
+    const customFormat = printf(options => {
+        return `>>>>>>>>>> ${options.timestamp} - ${options.level.toUpperCase()} - ${options.message}`
+    })
+
+    let logger = createLogger({
+        format: combine(
+            timestamp(),
+            customFormat
+        ),
         transports: [
-            new winston.transports.Console({
-                timestamp: function() {
-                    return timestamp;
-                },
-                formatter: function(options) {
-                    return `>>>>>>>>>> ${options.timestamp()} - ${options.level.toUpperCase()} - ${options.message}`;
-                }
-            }),
-            new winston.transports.File({
-                filename: 'log.log',
-                timestamp: function() {
-                    return timestamp;
-                },
-                formatter: function(options) {
-                    return `>>>>>>>>>> ${options.timestamp()} - ${options.level.toUpperCase()} - ${options.message}`;
-                },
-                json: false
-            })
+            new transports.Console(),
+            new transports.File({filename: 'log.log'})
         ]
-    });
+    })
 
     if (success || msg === 'Nothing to upload') {
         logger.log('info', msg)
@@ -375,13 +325,13 @@ function getConnection() {
             user     : env.DB_USER,
             password : env.DB_PASS,
             database : env.DB
-        });
+        })
 
         con.connect(err => {
             if (err) {
-                reject(err);
+                reject(['getConnection', err])
             } else {
-                resolve(con);
+                resolve(con)
             }
         })
     })
@@ -392,7 +342,7 @@ function getConnection() {
  * @param {Object} con - A database connection to close/destroy
  */
 function closeConnection(con) {
-    con.destroy();
+    con.destroy()
 }
 
 /**
@@ -402,18 +352,18 @@ function closeConnection(con) {
  * @param {boolean} exito - The status of the upload
  * @returns {Promise} The rows affected by the insert, or error message
  */
-function registerUpload(archivo, obs, exito) {
+function registerUpload(archivo, obs, exito, fileId) {
     return new Promise((resolve, reject) => {
         getConnection().then(con => {
             con.query({
-                sql: 'INSERT INTO `podcasts` (archivo, obs, pudo_subir) VALUES (?, ?, ?)',
+                sql: 'INSERT INTO `podcasts` (archivo, obs, pudo_subir, file_id) VALUES (?, ?, ?, ?)',
                 timeout: 40000,
-                values: [archivo, obs, exito]
+                values: [archivo, obs, exito, fileId]
             }, (err, results) => {
                 closeConnection(con)
 
                 if (err) {
-                    reject(err)
+                    reject(['registerUpload', err])
                 } else {
                     resolve(results)
                 }
@@ -436,7 +386,7 @@ function getRssList() {
                 closeConnection(con)
 
                 if (err) {
-                    reject(err)
+                    reject(['getRssList', err])
                 } else {
                     resolve(results)
                 }
@@ -461,7 +411,7 @@ function getPodcastByName(name) {
                 closeConnection(con)
 
                 if (err) {
-                    reject(err)
+                    reject(['getPodcastByName', err])
                 } else {
                     resolve(results)
                 }
@@ -484,7 +434,7 @@ function getFailedPodcasts() {
                 closeConnection(con)
 
                 if (err) {
-                    reject(err)
+                    reject(['getFailedPodcasts', err])
                 } else {
                     resulve(results)
                 }
@@ -507,7 +457,7 @@ function getStoredPodcasts() {
                 closeConnection(con)
 
                 if (err) {
-                    reject(err)
+                    reject(['getStoredPodcasts', err])
                 } else {
                     resolve(results)
                 }

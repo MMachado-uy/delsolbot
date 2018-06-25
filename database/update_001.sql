@@ -1,5 +1,7 @@
 ALTER TABLE sources
-    ADD COLUMN nombre VARCHAR(80)
+    ADD COLUMN nombre VARCHAR(80);
+
 
 ALTER TABLE podcasts
     ADD COLUMN file_id VARCHAR(50);
+    MODIFY COLUMN obs TEXT;
