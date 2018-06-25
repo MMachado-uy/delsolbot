@@ -15,7 +15,7 @@ var querystring     = require('querystring');
 var FormData        = require('form-data');
 var mm              = require('musicmetadata');
 
-const COVER = fs.createReadStream('./assets/cover_mundial.jpg')
+const COVER = './assets/cover_mundial.jpg'
 
 /**
  * https://core.telegram.org/bots/api#sendaudio
@@ -98,16 +98,17 @@ function main() {
 
                     getFeed(url)
                     .then(feed => {
-                        return ignoreUploadedPodcasts(feed)
+                        return ignoreUploadedPodcasts(feed, storedPodcasts)
                     }).then(feed => {
                         return parseFeed(feed)
                     }).then(feed => {
                         return sendFeedToTelegram(feed, channel)
+                    }).then(() => {
+                        callback()
                     }).catch((error) => {
                         callback(error)
                     })
 
-                    callback()
                 }, err => {
                     if (err) logger(false, `Some generic error situation going on here: ${err}`)
                 })
@@ -140,7 +141,7 @@ function getFeed(rssUri) {
     })
 }
 
-function ignoreUploadedPodcasts(feed) {
+function ignoreUploadedPodcasts(feed, storedPodcasts) {
     return new Promise((resolve, reject) => {
         for (let sp of storedPodcasts) {
             for (let i = 0; i < feed.item.length; i++) {
@@ -191,16 +192,15 @@ function sendFeedToTelegram(feed, channel) {
 
         eachOf(feedItems, (value, key, callback) => {
 
-            let content = `<b>${value.title}</b>\n${value.desc}`
-            let episodePath = `downloads/${value.title}.mp3`;
+            let content = `<b>${sanitizeContent(value.title)}</b>\n${sanitizeContent(value.desc)}`
+            let episodePath = `downloads/${sanitizeEpisode(value.title)}.mp3`
 
             if (content.length > 200) {
                 content = content.substring(0, 197)
                 content += '...'
             }
-            content = encodeURI(content)
 
-            downloadEpisode(value.url)
+            downloadEpisode(value.url, episodePath)
             .then((episodePath) => {
                 return editMetadata(feedTitle, value.title, content, episodePath)
             }).then((episodePath) => {
@@ -208,11 +208,10 @@ function sendFeedToTelegram(feed, channel) {
             }).then(() => {
                 logger(true, `${value.archivo} Uploaded`)
                 return registerUpload(value.archivo, '', true)
-            })
-            .then(() => {
+            }).then(() => {
                 callback()
             }).catch((err) => {
-                logger(false, `${value.archivo} Failed to upload. ${err.response.data.error_code} - ${err.response.data.description}`)
+                logger(false, `${value.archivo} Failed to upload. ${err}`)
                 registerUpload(value.archivo, '', false)
                 .then(err => {
                     callback(err)
@@ -222,7 +221,6 @@ function sendFeedToTelegram(feed, channel) {
                 })
             })
 
-            fs.unlinkSync(episodePath)
         }, err => {
             if (err) reject(err)
             resolve()
@@ -230,29 +228,35 @@ function sendFeedToTelegram(feed, channel) {
     })
 }
 
-function downloadEpisode(episodeUrl, title, episodePath) {
+function downloadEpisode(episodeUrl, episodePath) {
     return new Promise((resolve, reject) => {
+        let stream = fs.createWriteStream(episodePath)
+
+        console.log("episodePath downloadEpisode ", episodePath)
         request.get(episodeUrl, (error, response, body) => {
             if (!error) {
-                if (typeof body.ok )
-                resolve()
+                stream.close();
+                resolve(episodePath)
             } else {
                 reject('Connection error')
             }
         })
-        .pipe(fs.createWriteStream(episodePath))
+        .pipe(stream)
     })
 }
 
 function editMetadata(artist, title, comment, episodePath) {
     return new Promise((resolve, reject) => {
+        console.log("episodePath editMetadata ", episodePath);
         let tags = {
             artist,
             title,
             comment,
-            APIC: './assets/cover_mundial.jpg'
+            APIC: COVER
         }
 
+        console.log("tags ", tags);
+        console.log("episodePath ", episodePath);
         NodeID3.write(tags, episodePath, (err, buffer) => {
             if (!err) {
                 resolve(episodePath)
@@ -265,30 +269,52 @@ function editMetadata(artist, title, comment, episodePath) {
 
 function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
     return new Promise ((resolve, reject) => {
-
+        console.log("episodePath sendEpisodeToChannel ", episodePath);
+        
+        console.log("fs.createReadStream(episodePath) ", typeof fs.createReadStream(episodePath));
         let payload = {
             audio: fs.createReadStream(episodePath),
-            disable_notification: true,
+            disable_notification: 'true',
             parse_mode: 'html',
             caption,
             chat_id: '@delsoltest',
             performer,
             title
         }
-
+        
         let connectcionUrl   = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio`;
+        console.log("episodePath ", typeof episodePath);
+        console.log("payload ", typeof payload);
+        console.log("connectcionUrl ", typeof connectcionUrl);
 
         requestP.post({
-            url:connectcionUrl, 
-            formData: payload
-        })
-        .then(() => {
-            resolve()
-        })
-        .catch(err => {
+            url: connectcionUrl, 
+            formData: payload,
+            json: true
+        }).then(() => {
+            fs.unlink(episodePath, err => {
+                if (err) {
+                    reject(err)
+                } else {
+                    resolve()
+                }
+            })
+        }).catch(err => {
             reject(err)
         })
     })
+}
+
+function sanitizeEpisode(episodeTitle) {
+    return episodeTitle.replace(new RegExp('/','g'),'-').trim()
+}
+
+function sanitizeContent(episodeContent) {
+    return episodeContent
+            .replace(new RegExp('"','g'),'&quot;')
+            .replace(new RegExp('&','g'),'&amp;')
+            .replace(new RegExp('<','g'),'&lt;')
+            .replace(new RegExp('>','g'),'&gt;')
 }
 
 /******************************************************************************/
