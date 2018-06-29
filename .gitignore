@@ -1,4 +1,4 @@
 node_modules/
-downloads/*.mp3
+downloads/
 .env
 log.log

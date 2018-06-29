@@ -3,6 +3,7 @@ const parseString   = require('xml2js').parseString
 const mysql         = require('mysql')
 const eachOf        = require('async/eachOf')
 const NodeID3       = require('node-id3')
+const rimraf        = require('rimraf')
 const { 
     createLogger, 
     format, 
@@ -278,21 +279,11 @@ function sanitizeContent(str) {
 
 function cleanDownloads() {
     return new Promise((resolve, reject) => {
-
-        fs.readdir(DDIR, (err, files) => {
-            
+        rimraf(DDIR, (err) => {
             if (err) {
                 reject(['cleanDownloads', err])
             } else {
-                files.forEach(file => {
-                    if (file !== '.gitkeep') {
-                        if (fs.lstatSync(`${DDIR}${file}`).isDirectory()) {
-                            fs.rmdirSync(`${DDIR}${file}`)
-                        } else {
-                            fs.unlinkSync(`${DDIR}${file}`)
-                        }
-                    }
-                })
+                fs.mkdirSync(DDIR)
                 resolve()
             }
         })
