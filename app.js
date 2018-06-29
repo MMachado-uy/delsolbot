@@ -74,7 +74,7 @@ function getFeed(rssUri) {
             if (response) {
                 parseString(response, (err, result) => {
                     if (err) {
-                        reject(['getFeed', err])
+                        reject(['getFeed' + rssUri, err])
                     } else {
                         resolve(result.rss.channel[0])
                     }
@@ -126,7 +126,7 @@ function parseFeed(feed) {
         if (parsedFeed.length) {
             resolve({title,parsedFeed})
         } else {
-            reject(['parseFeed', 'Nothing to upload'])
+            reject([`${title} parseFeed`, 'Nothing to upload'])
         }
     })
 }
@@ -139,14 +139,15 @@ function sendFeedToTelegram(feed, channel) {
         eachOf(feedItems, (value, key, callback) => {
 
             let content = `<b>${value.title}</b>\n${value.desc}`
-            let episodePath = `${DDIR}${sanitizeEpisode(value.title)}.mp3`
+            let folder = sanitizeContent(feedTitle)
+            let episodePath = `${DDIR}${folder}/${sanitizeEpisode(value.title)}.mp3`
 
             if (content.length > 200) {
                 content = content.substring(0, 197)
                 content += '...'
             }
 
-            downloadEpisode(value.url, episodePath)
+            downloadEpisode(value.url, episodePath, folder)
             .then((episodePath) => {
                 return editMetadata(feedTitle, value.title, content, episodePath)
             }).then((episodePath) => {
@@ -157,18 +158,18 @@ function sendFeedToTelegram(feed, channel) {
             }).then(() => {
                 callback()
             }).catch((err) => {
+
                 logger(false, `${value.archivo} Failed to upload. ${err}`)
                 registerUpload(value.archivo, err, false, '')
                 .then(err => {
                     callback(err)
-                })
-                .catch(err => {
+                }).catch(err => {
                     callback(err)
                 })
             })
         }, err => {
             if (err) {
-                reject(['sendFeedToTelegram', err])
+                reject([`${feedTitle} sendFeedToTelegram`, err])
             } else {
                 resolve()
             }
@@ -176,8 +177,11 @@ function sendFeedToTelegram(feed, channel) {
     })
 }
 
-function downloadEpisode(episodeUrl, episodePath) {
+function downloadEpisode(episodeUrl, episodePath, folder) {
     return new Promise((resolve, reject) => {
+
+        fs.mkdirSync(`${DDIR}${folder}`)
+
         let stream = fs.createWriteStream(episodePath)
 
         request.get(episodeUrl, (error, response, body) => {
@@ -185,7 +189,7 @@ function downloadEpisode(episodeUrl, episodePath) {
                 stream.close()
                 resolve(episodePath)
             } else {
-                reject(['downloadEpisode', 'Connection error'])
+                reject([`${episodeUrl} downloadEpisode`, `Connection error: ${error}`])
             }
         })
         .pipe(stream)
@@ -205,7 +209,7 @@ function editMetadata(artist, title, comment, episodePath) {
             if (!err) {
                 resolve(episodePath)
             } else {
-                reject(['editMetadata', err])
+                reject([`${artist} - ${title} editMetadata`, err])
             }
         })
     })
@@ -218,7 +222,7 @@ function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
             disable_notification: 'true',
             parse_mode: 'html',
             caption,
-            chat_id,
+            chat_id: '@delsoltest',
             performer,
             title
         }
@@ -232,13 +236,14 @@ function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
         }).then((res) => {
             fs.unlink(episodePath, err => {
                 if (err) {
-                    reject(['sendEpisodeToChannel', err])
+                    reject([`${performer} - ${title} sendEpisodeToChannel`, err])
                 } else {
                     resolve(res.result.audio.file_id)
                 }
             })
         }).catch(err => {
-            reject(['sendEpisodeToChannel', err.message])
+            fs.unlinkSync(episodePath)
+            reject([`${performer} - ${title} sendEpisodeToChannel`, err.message])
         })
     })
 }
@@ -247,28 +252,45 @@ function sanitizeEpisode(episodeTitle) {
     return episodeTitle.replace(new RegExp('/','g'),'-').trim()
 }
 
-function sanitizeContent(episodeContent) {
-    return episodeContent
-            .replace(new RegExp('"','g'),'&quot;')
-            .replace(new RegExp('&','g'),'&amp;')
-            .replace(new RegExp('<','g'),'&lt;')
-            .replace(new RegExp('>','g'),'&gt;')
+function sanitizeContent(str) {
+    if (typeof str !== 'string') {
+        str = {
+            nonstring: str
+        }
+
+        str = JSON.stringify(str)
+    }
+    return str
+            .replace(/"/gi,'&quot;')
+            .replace(/&/gi,'&amp;')
+            .replace(/</gi,'&lt;')
+            .replace(/>/gi,'&gt;')
+            .replace(/'/gi,'')
+            .replace(/ /gi,'_')
+            .replace(/á/gi,'a')
+            .replace(/é/gi,'e')
+            .replace(/í/gi,'i')
+            .replace(/ó/gi,'o')
+            .replace(/ú/gi,'u')
 }
 
 function cleanDownloads() {
     return new Promise((resolve, reject) => {
 
         fs.readdir(DDIR, (err, files) => {
-
+            
             if (err) {
                 reject(['cleanDownloads', err])
             } else {
                 files.forEach(file => {
                     if (file !== '.gitkeep') {
-                        fs.unlinkSync(`${DDIR}${file}`)
+                        if (fs.lstatSync(`${DDIR}${file}`).isDirectory()) {
+                            fs.rmdirSync(`${DDIR}${file}`)
+                        } else {
+                            fs.unlinkSync(`${DDIR}${file}`)
+                        }
                     }
                 })
-
                 resolve()
             }
         })
@@ -285,7 +307,6 @@ function cleanDownloads() {
  * @param {string} msg A message to output
  */
 function logger(success, msg) {
-    //let timestamp = new Date().toUTCString()
 
     const customFormat = printf(options => {
         return `>>>>>>>>>> ${options.timestamp} - ${options.level.toUpperCase()} - ${options.message}`
@@ -350,24 +371,30 @@ function closeConnection(con) {
  * @param {string} archivo - Name of the file to register
  * @param {string} obs - A comment
  * @param {boolean} exito - The status of the upload
+ * @param {string} fileId - The id returned by Telegram
  * @returns {Promise} The rows affected by the insert, or error message
  */
-function registerUpload(archivo, obs, exito, fileId) {
+function registerUpload(archivo, obs = '', exito, fileId = '') {
     return new Promise((resolve, reject) => {
+        
+        exito = (exito ? 1 : 0)
+        obs = sanitizeContent(obs)
+
         getConnection().then(con => {
             con.query({
                 sql: 'INSERT INTO `podcasts` (archivo, obs, pudo_subir, file_id) VALUES (?, ?, ?, ?)',
                 timeout: 40000,
-                values: [archivo, obs, exito, fileId]
+                values: [archivo,  obs, exito, fileId]
             }, (err, results) => {
                 closeConnection(con)
-
                 if (err) {
-                    reject(['registerUpload', err])
+                    reject([`${archivo} registerUpload`, err])
                 } else {
                     resolve(results)
                 }
             })
+        }).catch(err => {
+            reject([`${archivo} getConnection`, err])
         })
     })
 }
