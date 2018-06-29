@@ -180,7 +180,9 @@ function sendFeedToTelegram(feed, channel) {
 function downloadEpisode(episodeUrl, episodePath, folder) {
     return new Promise((resolve, reject) => {
 
-        fs.mkdirSync(`${DDIR}${folder}`)
+        if (!fs.existsSync(`${DDIR}${folder}`)) {
+            fs.mkdirSync(`${DDIR}${folder}`)
+        }
 
         let stream = fs.createWriteStream(episodePath)
 
