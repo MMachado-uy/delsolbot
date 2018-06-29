@@ -222,7 +222,7 @@ function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
             disable_notification: 'true',
             parse_mode: 'html',
             caption,
-            chat_id: '@delsoltest',
+            chat_id,
             performer,
             title
         }
