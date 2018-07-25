@@ -19,7 +19,7 @@ var fs              = require('fs')
 var request         = require('request')
 var requestP        = require('request-promise-native')
 
-const COVER = './assets/cover_mundial.jpg'
+const COVER = './assets/cover.jpg'
 const DDIR  = './downloads/'
 
 new CronJob('0 0 * * * *', () => {
