@@ -29,9 +29,9 @@ var TwCli           = new Twitter({
 const COVER = './assets/cover.jpg'
 const DDIR  = './downloads/'
 
-// new CronJob('0 0 * * * *', () => {
+new CronJob('0 0 * * * *', () => {
     main()
-// }, null, true)
+}, null, true)
 
 /**
  * Main Application logic
@@ -282,7 +282,7 @@ function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
             disable_notification: 'true',
             parse_mode: 'html',
             caption,
-            chat_id: '@delsoltest',
+            chat_id,
             performer,
             title
         }
