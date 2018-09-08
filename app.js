@@ -3,13 +3,14 @@ const parseString   = require('xml2js').parseString
 const mysql         = require('mysql')
 const eachOf        = require('async/eachOf')
 const NodeID3       = require('node-id3')
+const Twitter       = require('twitter')
 const rimraf        = require('rimraf')
-const { 
-    createLogger, 
-    format, 
+const {
+    createLogger,
+    format,
     transports }    = require('winston')
-const { 
-    combine, 
+const {
+    combine,
     timestamp,
     printf }        = format
 
@@ -18,13 +19,19 @@ var CronJob         = require('cron').CronJob
 var fs              = require('fs')
 var request         = require('request')
 var requestP        = require('request-promise-native')
+var TwCli           = new Twitter({
+                        consumer_key: process.env.TWITTER_CONSUMER_KEY,
+                        consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
+                        access_token_key: process.env.TWITTER_ACCESS_TOKEN_KEY,
+                        access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET
+                    });
 
 const COVER = './assets/cover.jpg'
 const DDIR  = './downloads/'
 
-new CronJob('0 0 * * * *', () => {
+// new CronJob('0 0 * * * *', () => {
     main()
-}, null, true)
+// }, null, true)
 
 /**
  * Main Application logic
@@ -32,7 +39,7 @@ new CronJob('0 0 * * * *', () => {
 function main() {
     cleanDownloads()
     .then(() => {
-       return getRssList()  
+       return getRssList()
     }).then(res => {
         if (res.length) {
             return getStoredPodcasts()
@@ -66,6 +73,11 @@ function main() {
     })
 }
 
+/**
+ * Obtener la lista de episodios del feed
+ * @param {string} rssUri - The url of the RSS Feed
+ * @returns {Promise}
+ */
 function getFeed(rssUri) {
     return new Promise((resolve, reject) => {
 
@@ -87,6 +99,12 @@ function getFeed(rssUri) {
     })
 }
 
+/**
+ * Filtra los episodios ya procesados en ejecuciones anteriores.
+ * @param {Object} feed - El RSS feed parseado con todos los episodios
+ * @param {Object} storedPodcasts - Los episodios ya procesados y guardados en la BD
+ * @returns {Promise}
+ */
 function ignoreUploadedPodcasts(feed, storedPodcasts) {
     return new Promise((resolve, reject) => {
         for (let sp of storedPodcasts) {
@@ -107,6 +125,11 @@ function ignoreUploadedPodcasts(feed, storedPodcasts) {
     })
 }
 
+/**
+ * Procesa el feed filtrado y lo convierte a un formato mas conveniente
+ * @param {Object} feed - El Feed sin los episodios ya procesados con anterioridad y el resto de la metadata
+ * @returns {Promise}
+ */
 function parseFeed(feed) {
     return new Promise((resolve, reject) => {
         let rawFeed = feed.item
@@ -114,11 +137,15 @@ function parseFeed(feed) {
         let title = feed.title[0]
 
         for (let item of rawFeed) {
+            let imagen = item['itunes:image'][0].$.href
+            if (imagen === '') imagen = COVER
+
             let parsedItem = {
                 title: item.title[0],
                 desc: item.description[0],
                 url: item.link[0],
-                archivo: item.link[0].substring(item.link[0].lastIndexOf("/") + 1, item.link[0].lastIndexOf(".mp3"))
+                archivo: item.link[0].substring(item.link[0].lastIndexOf("/") + 1, item.link[0].lastIndexOf(".mp3")),
+                imagen
             }
 
             parsedFeed.push(parsedItem)
@@ -139,29 +166,38 @@ function sendFeedToTelegram(feed, channel) {
 
         eachOf(feedItems, (value, key, callback) => {
 
-            let content = `<b>${value.title}</b>\n${value.desc}`
+            let { title, desc, url, archivo, imagen } = value;
+            let content = `<b>${title}</b>\n${desc}`
             let folder = sanitizeContent(feedTitle)
-            let episodePath = `${DDIR}${folder}/${sanitizeEpisode(value.title)}.mp3`
+            let episodePath = `${DDIR}${folder}/${sanitizeEpisode(title)}.mp3`
+            let message_id = ''
 
             if (content.length > 200) {
                 content = content.substring(0, 197)
                 content += '...'
             }
 
-            downloadEpisode(value.url, episodePath, folder)
+            downloadEpisode(url, episodePath, folder)
             .then((episodePath) => {
-                return editMetadata(feedTitle, value.title, content, episodePath)
+                return editMetadata(feedTitle, title, content, episodePath)
             }).then((episodePath) => {
-                return sendEpisodeToChannel(episodePath, content, channel, feedTitle, value.title)
-            }).then((file_id) => {
-                logger(true, `${value.archivo} Uploaded`)
-                return registerUpload(value.archivo, '', true, file_id)
+                return sendEpisodeToChannel(episodePath, content, channel, feedTitle, title)
+            }).then((res) => {
+                logger(true, `${archivo} Uploaded`)
+
+                message_id = res.message_id
+
+                return registerUpload(archivo, '', true, res.file_id)
+            }).then(() => {
+                return downloadImage(imagen, episodePath, folder)
+            }).then((imagePath) =>{
+                return tweetit(message_id, imagePath, title, channel)
             }).then(() => {
                 callback()
             }).catch((err) => {
 
-                logger(false, `${value.archivo} Failed to upload. ${err}`)
-                registerUpload(value.archivo, err, false, '')
+                logger(false, `${archivo} Failed to upload. ${err}`)
+                registerUpload(archivo, err, false, '')
                 .then(err => {
                     callback(err)
                 }).catch(err => {
@@ -199,6 +235,27 @@ function downloadEpisode(episodeUrl, episodePath, folder) {
     })
 }
 
+function downloadImage(imageUrl, imagePath, folder) {
+    return new Promise((resolve, reject) => {
+
+        if (!fs.existsSync(`${DDIR}${folder}`)) {
+            fs.mkdirSync(`${DDIR}${folder}`)
+        }
+
+        let stream = fs.createWriteStream(imagePath)
+
+        request.get(imageUrl, (error, response, body) => {
+            if (!error) {
+                stream.close()
+                resolve(imagePath)
+            } else {
+                reject([`${imageUrl} downloadEpisode`, `Connection error: ${error}`])
+            }
+        })
+        .pipe(stream)
+    })
+}
+
 function editMetadata(artist, title, comment, episodePath) {
     return new Promise((resolve, reject) => {
         let tags = {
@@ -225,15 +282,15 @@ function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
             disable_notification: 'true',
             parse_mode: 'html',
             caption,
-            chat_id,
+            chat_id: '@delsoltest',
             performer,
             title
         }
-        
-        let connectcionUrl   = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio`
+
+        let connectcionUrl = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio`
 
         requestP.post({
-            url: connectcionUrl, 
+            url: connectcionUrl,
             formData: payload,
             json: true
         }).then((res) => {
@@ -241,7 +298,7 @@ function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
                 if (err) {
                     reject([`${performer} - ${title} sendEpisodeToChannel`, err])
                 } else {
-                    resolve(res.result.audio.file_id)
+                    resolve({ file_id: res.result.audio.file_id, message_id: res.result.message_id })
                 }
             })
         }).catch(err => {
@@ -288,6 +345,67 @@ function cleanDownloads() {
             }
         })
     })
+}
+
+/******************************************************************************/
+/***********************************  TWITTER  ********************************/
+/******************************************************************************/
+
+function tweetit(message_id, imagen, titulo, canal) {
+    return new Promise((resolve, reject) => {
+        subirMedia(imagen)
+        .then(res => {
+            return tweet(res, message_id, titulo, canal)
+        })
+        .then(res => {
+            resolve()
+        })
+        .catch(err => {
+            reject(err)
+        })
+    })
+}
+
+function subirMedia(filePath = 'cover.jpg') {
+
+    let media = fs.readFileSync(filePath)
+    let media_data = new Buffer(media).toString('base64')
+
+    let payload = {
+        media,
+        media_data
+    }
+
+    return TwCli.post('media/upload', payload)
+}
+
+function tweet(imagen, message_id, titulo, canal) {
+    canal = canal.substr(1, canal.length)
+    let url = `https://t.me/${canal}/${message_id}`
+    let cuerpo = `\nTe lo perdiste? Está en Telegram! `
+    let hashtags = `\n#DelSolEnTelegram #DelSol`
+    let status = `${titulo}${cuerpo}${url}${hashtags}`
+
+    if (status.length > 280) {
+        if (titulo.length + url.length + hashtags.length < 278) { // 280 - '\n'.length
+            status = `${titulo}\n${url}${hashtags}`
+        } else {
+            let n = titulo.length + url.length + hashtags.length + 2 // Largo del mensaje
+            n = n - 280 // Sobrante del maximo
+            n = titulo.length - n - 3
+
+            titulo = titulo.substr(0, n)
+            titulo += '...'
+
+            status = `${titulo}\n${url}${hashtags}`
+        }
+    }
+
+    let payload = {
+        status,
+        media_ids: imagen.media_id_string
+    }
+    return TwCli.post('statuses/update', payload)
 }
 
 /******************************************************************************/
@@ -369,7 +487,7 @@ function closeConnection(con) {
  */
 function registerUpload(archivo, obs = '', exito, fileId = '') {
     return new Promise((resolve, reject) => {
-        
+
         exito = (exito ? 1 : 0)
         obs = sanitizeContent(obs)
 
