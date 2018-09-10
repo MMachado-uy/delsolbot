@@ -138,7 +138,6 @@ function parseFeed(feed) {
 
         for (let item of rawFeed) {
             let imagen = item['itunes:image'][0].$.href
-            if (imagen === '') imagen = COVER
 
             let parsedItem = {
                 title: item.title[0],
@@ -262,17 +261,21 @@ function downloadImage(imageUrl, imagePath, folder) {
             fs.mkdirSync(`${DDIR}${folder}`)
         }
 
-        let stream = fs.createWriteStream(imagePath)
+        if (imageUrl === '') {
+            resolve(COVER)
+        } else {
+            let stream = fs.createWriteStream(imagePath)
 
-        request.get(imageUrl, (error, response, body) => {
-            if (!error) {
-                stream.close()
-                resolve(imagePath)
-            } else {
-                reject([`${imageUrl} downloadEpisode`, `Connection error: ${error}`])
-            }
-        })
-        .pipe(stream)
+            request.get(imageUrl, (error, response, body) => {
+                if (!error) {
+                    stream.close()
+                    resolve(imagePath)
+                } else {
+                    reject([`${imageUrl} downloadImage`, `Connection error: ${error}`])
+                }
+            })
+            .pipe(stream)
+        }
     })
 }
 
