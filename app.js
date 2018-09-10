@@ -29,7 +29,7 @@ var TwCli           = new Twitter({
 const COVER = './assets/cover.jpg'
 const DDIR  = './downloads/'
 
-new CronJob('0 0 * * * *', () => {
+new CronJob('0 */30 * * * *', () => {
     main()
 }, null, true)
 
@@ -159,6 +159,12 @@ function parseFeed(feed) {
     })
 }
 
+/**
+ * Toma un feed de un canal especifico y lo envia a Telegram y Twitter
+ * @param {Object} feed - Los episodios para el canal actual, con la metadata filtrada
+ * @param {String} channel - El nombre del canal que se esta procesando
+ * @returns {Promise}
+ */
 function sendFeedToTelegram(feed, channel) {
     return new Promise((resolve, reject) => {
         let feedTitle = feed.title
@@ -214,6 +220,13 @@ function sendFeedToTelegram(feed, channel) {
     })
 }
 
+/**
+ * Decarga un episodio al servidor para luego procesar su metadata
+ * @param {String} episodeUrl - La url del episodio a descargar
+ * @param {String} episodePath - La ruta local donde almacenarlo
+ * @param {String} folder - El nombre de la carpeta a descargar
+ * @returns {Promise} La ruta local del episodio
+ */
 function downloadEpisode(episodeUrl, episodePath, folder) {
     return new Promise((resolve, reject) => {
 
@@ -235,6 +248,13 @@ function downloadEpisode(episodeUrl, episodePath, folder) {
     })
 }
 
+/**
+ * Descarga la imagen asociada al episodio, a adjuntar en Twitter
+ * @param {String} imageUrl - La url de la imagen a descargar
+ * @param {String} imagePath - La ruta local donde almacenarla
+ * @param {String} folder El nombre de la carpeta a descargar
+ * @returns {Promise} La ruta local de la imagen
+ */
 function downloadImage(imageUrl, imagePath, folder) {
     return new Promise((resolve, reject) => {
 
@@ -256,6 +276,13 @@ function downloadImage(imageUrl, imagePath, folder) {
     })
 }
 
+/**
+ * Procesa la metadata idv3 de un episodio para generar datos coherentes con su contenido
+ * @param {String} artist - El nombre del Programa, a popular el campo 'artista'
+ * @param {String} title - El nombre del episodio, a popular el campo 'title'
+ * @param {String} comment - La descripcion del episodio, a popular el campo 'comment'
+ * @param {String} episodePath - La ruta completa donde esta guardado el episodio
+ */
 function editMetadata(artist, title, comment, episodePath) {
     return new Promise((resolve, reject) => {
         let tags = {
