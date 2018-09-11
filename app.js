@@ -381,6 +381,14 @@ function cleanDownloads() {
 /***********************************  TWITTER  ********************************/
 /******************************************************************************/
 
+/**
+ * Maneja la integracion con la Twitter API
+ * @param {String} message_id - El id del mensaje, devuelto por la Telegram API
+ * @param {String} imagen - URL de la imagen asociada al episodio.
+ * @param {String} titulo - El titulo del episodio
+ * @param {String} canal - Canal al que corresponde el episodio
+ * @returns {Promise}
+ */
 function tweetit(message_id, imagen, titulo, canal) {
     return new Promise((resolve, reject) => {
         subirMedia(imagen)
@@ -396,6 +404,11 @@ function tweetit(message_id, imagen, titulo, canal) {
     })
 }
 
+/**
+ * Maneja la subida de imagenes de episodio
+ * @param {String} filePath - Ruta local de la imagen asociada al episodio
+ * @returns {Promise} - La respuesta a la subida de imagenes
+ */
 function subirMedia(filePath = 'cover.jpg') {
 
     let media = fs.readFileSync(filePath)
@@ -409,10 +422,17 @@ function subirMedia(filePath = 'cover.jpg') {
     return TwCli.post('media/upload', payload)
 }
 
+/**
+ * Envia el tweet con la referencia al mensaje en el canal de Telegram correspondiente
+ * @param {String} imagen - Ubicacion local de la imagen descargada
+ * @param {String} message_id - Id del mensaje a referenciar
+ * @param {String} titulo - Titulo del episodio
+ * @param {String} canal - Nombre del canal asociado al episodio
+ */
 function tweet(imagen, message_id, titulo, canal) {
     canal = canal.substr(1, canal.length)
     let url = `https://t.me/${canal}/${message_id}`
-    let cuerpo = `\nTe lo perdiste? Está en Telegram! `
+    let cuerpo = `\nTe lo perdiste? Está en Telegram: `
     let hashtags = `\n#DelSolEnTelegram #DelSol`
     let status = `${titulo}${cuerpo}${url}${hashtags}`
 
