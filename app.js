@@ -25,13 +25,14 @@ var TwCli           = new Twitter({
                         access_token_key: process.env.TWITTER_ACCESS_TOKEN_KEY,
                         access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET
                     });
+var con = null
 
 const COVER = './assets/cover.jpg'
 const DDIR  = './downloads/'
 
-new CronJob('0 */30 * * * *', () => {
+//new CronJob('0 */30 * * * *', () => {
     main()
-}, null, true)
+//}, null, true)
 
 /**
  * Main Application logic
@@ -39,7 +40,11 @@ new CronJob('0 */30 * * * *', () => {
 function main() {
     cleanDownloads()
     .then(() => {
-       return getRssList()
+        return getConnection()
+    }).then((res) => {
+        if (typeof res != 'undefined' && res.state === 'authenticated') con = res
+
+        return getRssList()
     }).then(res => {
         if (res.length) {
             return getStoredPodcasts()
@@ -68,8 +73,13 @@ function main() {
         } else {
             logger(false, 'No sources to retrieve')
         }
-    }).catch(err => {
+    }).then(() => {
+        return closeConnection()
+    })
+    .catch(err => {
         logger(false, `Database connection error: ${err.message}`)
+
+        if (con.state === 'authenticated') con.destroy()
     })
 }
 
@@ -194,10 +204,10 @@ function sendFeedToTelegram(feed, channel) {
 
                 return registerUpload(archivo, '', true, res.file_id)
             }).then(() => {
-                return downloadImage(imagen, episodePath, folder)
-            }).then((imagePath) =>{
-                return tweetit(message_id, imagePath, title, channel)
-            }).then(() => {
+            //     return downloadImage(imagen, episodePath, folder)
+            // }).then((imagePath) =>{
+            //     return tweetit(message_id, imagePath, title, channel)
+            // }).then(() => {
                 callback()
             }).catch((err) => {
 
@@ -312,7 +322,7 @@ function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
             disable_notification: 'true',
             parse_mode: 'html',
             caption,
-            chat_id,
+            chat_id: '@delsoltest',
             performer,
             title
         }
@@ -501,7 +511,7 @@ function logger(success, msg) {
  */
 function getConnection() {
     return new Promise((resolve, reject) => {
-        var con = mysql.createConnection({
+        let con = mysql.createConnection({
             host     : env.DB_HOST,
             port     : env.DB_PORT,
             user     : env.DB_USER,
@@ -523,8 +533,15 @@ function getConnection() {
  * Closes/destroys a database connection
  * @param {Object} con - A database connection to close/destroy
  */
-function closeConnection(con) {
-    con.destroy()
+function closeConnection() {
+    return new Promise((resolve, reject) => {
+        if (con.state === 'authenticated') {
+            con.destroy()
+            resolve()
+        } else {
+            reject(['closeConnection'], 'Connection was not established')
+        }
+    })
 }
 
 /**
@@ -540,23 +557,23 @@ function registerUpload(archivo, obs = '', exito, fileId = '') {
 
         exito = (exito ? 1 : 0)
         obs = sanitizeContent(obs)
-
-        getConnection().then(con => {
+console.log(con)
+        if (con.state === 'authenticated') {
             con.query({
                 sql: 'INSERT INTO `podcasts` (archivo, obs, pudo_subir, file_id) VALUES (?, ?, ?, ?)',
                 timeout: 40000,
                 values: [archivo,  obs, exito, fileId]
             }, (err, results) => {
-                closeConnection(con)
+
                 if (err) {
                     reject([`${archivo} registerUpload`, err])
                 } else {
                     resolve(results)
                 }
             })
-        }).catch(err => {
-            reject([`${archivo} getConnection`, err])
-        })
+        } else {
+            reject(['registerUpload', 'There is no active connection'])
+        }
     })
 }
 
@@ -566,12 +583,12 @@ function registerUpload(archivo, obs = '', exito, fileId = '') {
  */
 function getRssList() {
     return new Promise((resolve, reject) => {
-        getConnection().then(con => {
+
+        if (con.state === 'authenticated') {
             con.query({
                 sql: 'SELECT url, channel FROM `sources`',
                 timeout: 40000
             }, (err, results) => {
-                closeConnection(con)
 
                 if (err) {
                     reject(['getRssList', err])
@@ -579,7 +596,9 @@ function getRssList() {
                     resolve(results)
                 }
             })
-        })
+        } else {
+            reject(['getRssList', 'There is no active connection'])
+        }
     })
 }
 
@@ -590,13 +609,13 @@ function getRssList() {
  */
 function getPodcastByName(name) {
     return new Promise((resolve, reject) => {
-        getConnection().then(con => {
+
+        if (con.state === 'authenticated') {
             con.query({
                 sql: 'SELECT * FROM `podcasts` WHERE `archivo` = ?',
                 timeout: 40000,
                 values: [name]
             }, (err, results) => {
-                closeConnection(con)
 
                 if (err) {
                     reject(['getPodcastByName', err])
@@ -604,7 +623,9 @@ function getPodcastByName(name) {
                     resolve(results)
                 }
             })
-        })
+        } else {
+            reject(['getPodcastByName', 'There is no active connection'])
+        }
     })
 }
 
@@ -614,12 +635,12 @@ function getPodcastByName(name) {
  */
 function getFailedPodcasts() {
     return new Promise((resolve, reject) => {
-        getConnection().then(con => {
+
+        if (con.state === 'authenticated') {
             con.query({
                 sql: 'SELECT * FROM `podcasts` WHERE `pudo_subir` = 0',
                 timeout: 40000
             }, (err, results) => {
-                closeConnection(con)
 
                 if (err) {
                     reject(['getFailedPodcasts', err])
@@ -627,7 +648,9 @@ function getFailedPodcasts() {
                     resulve(results)
                 }
             })
-        })
+        } else {
+            reject(['getFailedPodcasts', 'There is no active connection'])
+        }
     })
 }
 
@@ -637,12 +660,12 @@ function getFailedPodcasts() {
  */
 function getStoredPodcasts() {
     return new Promise((resolve, reject) => {
-        getConnection().then(con => {
+
+        if (con.state === 'authenticated') {
             con.query({
                 sql: 'SELECT id, archivo FROM `podcasts`',
                 timeout: 40000,
             }, (err, results) => {
-                closeConnection(con)
 
                 if (err) {
                     reject(['getStoredPodcasts', err])
@@ -650,6 +673,8 @@ function getStoredPodcasts() {
                     resolve(results)
                 }
             })
-        })
+        } else {
+            reject(['getStoredPodcasts', 'There is no active connection'])
+        }
     })
 }
