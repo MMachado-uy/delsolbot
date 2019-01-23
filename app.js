@@ -432,7 +432,7 @@ function subirMedia(filePath = 'cover.jpg') {
 function tweet(imagen, message_id, titulo, canal) {
     canal = canal.substr(1, canal.length)
     let url = `https://t.me/${canal}/${message_id}`
-    let cuerpo = `\nTe lo perdiste? Está en Telegram: `
+    let cuerpo = `\n¿Te lo perdiste? Está en Telegram: `
     let hashtags = `\n#DelSolEnTelegram #DelSol`
     let status = `${titulo}${cuerpo}${url}${hashtags}`
 
