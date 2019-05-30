@@ -1,42 +1,37 @@
-const env           = require('dotenv').config().parsed
+const env = require('dotenv').config().parsed
+
+let Logger = require('./controllers/logger.controller');
+let TwCcontroller = require('./controllers/twitter.controller');
+
 const parseString   = require('xml2js').parseString
 const mysql         = require('mysql')
 const eachOf        = require('async/eachOf')
 const NodeID3       = require('node-id3')
-const Twitter       = require('twitter')
 const rimraf        = require('rimraf')
-const {
-    createLogger,
-    format,
-    transports }    = require('winston')
-const {
-    combine,
-    timestamp,
-    printf }        = format
-
 
 var CronJob         = require('cron').CronJob
 var fs              = require('fs')
 var request         = require('request')
 var requestP        = require('request-promise-native')
-var TwCli           = new Twitter({
-                        consumer_key: process.env.TWITTER_CONSUMER_KEY,
-                        consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
-                        access_token_key: process.env.TWITTER_ACCESS_TOKEN_KEY,
-                        access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET
-                    });
 
 const COVER = './assets/cover.jpg'
 const DDIR  = './downloads/'
 
-new CronJob('0 */30 * * * *', () => {
+// new CronJob('0 */30 * * * *', () => {
     main()
-}, null, true)
+// }, null, true)
 
 /**
  * Main Application logic
  */
 function main() {
+    TwCli = new TwCcontroller(
+        process.env.TWITTER_CONSUMER_KEY,
+        process.env.TWITTER_CONSUMER_SECRET,
+        process.env.TWITTER_ACCESS_TOKEN_KEY,
+        process.env.TWITTER_ACCESS_TOKEN_SECRET
+    );
+
     cleanDownloads()
     .then(() => {
        return getRssList()
@@ -62,14 +57,14 @@ function main() {
                     })
 
                 }, err => {
-                    if (err) logger(false, `Some generic error situation going on here: ${err}`)
+                    if (err) Logger.log(false, `Some generic error situation going on here: ${err}`)
                 })
             })
         } else {
-            logger(false, 'No sources to retrieve')
+            Logger.log(false, 'No sources to retrieve')
         }
     }).catch(err => {
-        logger(false, `Database connection error: ${err.message}`)
+        Logger.log(false, `Database connection error: ${err.message}`)
     })
 }
 
@@ -176,6 +171,7 @@ function sendFeedToTelegram(feed, channel) {
             let folder = sanitizeContent(feedTitle)
             let episodePath = `${DDIR}${folder}/${sanitizeEpisode(title)}.mp3`
             let message_id = ''
+            let imagePath;
 
             if (content.length > 200) {
                 content = content.substring(0, 197)
@@ -188,7 +184,7 @@ function sendFeedToTelegram(feed, channel) {
             }).then((episodePath) => {
                 return sendEpisodeToChannel(episodePath, content, channel, feedTitle, title)
             }).then((res) => {
-                logger(true, `${archivo} Uploaded`)
+                Logger.log(true, `${archivo} Uploaded`)
 
                 message_id = res.message_id
 
@@ -196,12 +192,12 @@ function sendFeedToTelegram(feed, channel) {
             }).then(() => {
                 return downloadImage(imagen, episodePath, folder)
             }).then((imagePath) =>{
-                return tweetit(message_id, imagePath, title, channel)
+                return TwCli.tweetit(message_id, imagePath, title, channel)
             }).then(() => {
                 callback()
             }).catch((err) => {
 
-                logger(false, `${archivo} Failed to upload. ${err}`)
+                Logger.log(false, `${archivo} Failed to upload. ${err}`)
                 registerUpload(archivo, err, false, '')
                 .then(err => {
                     callback(err)
@@ -251,7 +247,7 @@ function downloadEpisode(episodeUrl, episodePath, folder) {
  * Descarga la imagen asociada al episodio, a adjuntar en Twitter
  * @param {String} imageUrl - La url de la imagen a descargar
  * @param {String} imagePath - La ruta local donde almacenarla
- * @param {String} folder El nombre de la carpeta a descargar
+ * @param {String} folder - El nombre de la carpeta a descargar
  * @returns {Promise} La ruta local de la imagen
  */
 function downloadImage(imageUrl, imagePath, folder) {
@@ -264,17 +260,15 @@ function downloadImage(imageUrl, imagePath, folder) {
         if (imageUrl === '') {
             resolve(COVER)
         } else {
-            let stream = fs.createWriteStream(imagePath)
-
-            request.get(imageUrl, (error, response, body) => {
-                if (!error) {
-                    stream.close()
-                    resolve(imagePath)
+            request.head(uri, (err, res, body) => {
+                if (!err) {
+                    request(uri)
+                    .pipe(fs.createWriteStream(filename))
+                    .on('close', resolve(imagePath));
                 } else {
-                    reject([`${imageUrl} downloadImage`, `Connection error: ${error}`])
+                    reject([`${imageUrl} downloadImage`, `Connection error: ${error}`]);
                 }
-            })
-            .pipe(stream)
+            });
         }
     })
 }
@@ -312,7 +306,7 @@ function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
             disable_notification: 'true',
             parse_mode: 'html',
             caption,
-            chat_id,
+            chat_id: 'ALJ3F0y08aDtRT7ayflIEQ',
             performer,
             title
         }
@@ -375,120 +369,6 @@ function cleanDownloads() {
             }
         })
     })
-}
-
-/******************************************************************************/
-/***********************************  TWITTER  ********************************/
-/******************************************************************************/
-
-/**
- * Maneja la integracion con la Twitter API
- * @param {String} message_id - El id del mensaje, devuelto por la Telegram API
- * @param {String} imagen - URL de la imagen asociada al episodio.
- * @param {String} titulo - El titulo del episodio
- * @param {String} canal - Canal al que corresponde el episodio
- * @returns {Promise}
- */
-function tweetit(message_id, imagen, titulo, canal) {
-    return new Promise((resolve, reject) => {
-        subirMedia(imagen)
-        .then(res => {
-            return tweet(res, message_id, titulo, canal)
-        })
-        .then(res => {
-            resolve()
-        })
-        .catch(err => {
-            reject(err)
-        })
-    })
-}
-
-/**
- * Maneja la subida de imagenes de episodio
- * @param {String} filePath - Ruta local de la imagen asociada al episodio
- * @returns {Promise} - La respuesta a la subida de imagenes
- */
-function subirMedia(filePath = 'cover.jpg') {
-
-    let media = fs.readFileSync(filePath)
-    let media_data = new Buffer(media).toString('base64')
-
-    let payload = {
-        media,
-        media_data
-    }
-
-    return TwCli.post('media/upload', payload)
-}
-
-/**
- * Envia el tweet con la referencia al mensaje en el canal de Telegram correspondiente
- * @param {String} imagen - Ubicacion local de la imagen descargada
- * @param {String} message_id - Id del mensaje a referenciar
- * @param {String} titulo - Titulo del episodio
- * @param {String} canal - Nombre del canal asociado al episodio
- */
-function tweet(imagen, message_id, titulo, canal) {
-    canal = canal.substr(1, canal.length)
-    let url = `https://t.me/${canal}/${message_id}`
-    let cuerpo = `\nTe lo perdiste? Está en Telegram: `
-    let hashtags = `\n#DelSolEnTelegram #DelSol`
-    let status = `${titulo}${cuerpo}${url}${hashtags}`
-
-    if (status.length > 280) {
-        if (titulo.length + url.length + hashtags.length < 278) { // 280 - '\n'.length
-            status = `${titulo}\n${url}${hashtags}`
-        } else {
-            let n = titulo.length + url.length + hashtags.length + 2 // Largo del mensaje
-            n = n - 280 // Sobrante del maximo
-            n = titulo.length - n - 3
-
-            titulo = titulo.substr(0, n)
-            titulo += '...'
-
-            status = `${titulo}\n${url}${hashtags}`
-        }
-    }
-
-    let payload = {
-        status,
-        media_ids: imagen.media_id_string
-    }
-    return TwCli.post('statuses/update', payload)
-}
-
-/******************************************************************************/
-/***********************************  LOGGER  *********************************/
-/******************************************************************************/
-
-/**
- * Logs the execution of the script
- * @param {boolean} error The execution status
- * @param {string} msg A message to output
- */
-function logger(success, msg) {
-
-    const customFormat = printf(options => {
-        return `>>>>>>>>>> ${options.timestamp} - ${options.level.toUpperCase()} - ${options.message}`
-    })
-
-    let logger = createLogger({
-        format: combine(
-            timestamp(),
-            customFormat
-        ),
-        transports: [
-            new transports.Console(),
-            new transports.File({filename: 'log.log'})
-        ]
-    })
-
-    if (success || msg === 'Nothing to upload') {
-        logger.log('info', msg)
-    } else {
-        logger.log('warn', msg)
-    }
 }
 
 /******************************************************************************/
