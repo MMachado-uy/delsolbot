@@ -28,6 +28,8 @@ All the code is in a spanish/english mix. Sorry about that.
 
 [ES]
 Instrucciones para clonar y ejecutar este proyecto en tu equipo local.
+[EN]
+Instructions to clone and run this project in a local environment.
 
 ### Requisitos / Requirements
 
@@ -85,9 +87,16 @@ Refactors and bugfixes only help us. But let's discuss them in an open Issue fir
 
 - **Mauricio Machado** - *Initial Work* - [MMachado-uy](https://github.com/MMachado-uy)
 
+[ES]
 Va tambien la lista de [colaboradores](https://github.com/MMachado-uy/delsolbot/graphs/contributors) que participaron en el proyecto.
+
+[EN]
+You can find all the collaborators [here](https://github.com/MMachado-uy/delsolbot/graphs/contributors).
 
 ## Licencia / License
 
+[ES]
 Este proyecto está bajo la licencia de código abierto del MIT, ve a  [LICENSE.md](LICENSE.md) por más detalles (en inglés).
+
+[EN]
 This project is under the Open Source MIT License, take a look at [LICENSE.md](LICENSE.md) for more details.
