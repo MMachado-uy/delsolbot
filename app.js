@@ -1,7 +1,7 @@
 const env = require('dotenv').config().parsed
 
 let Logger = require('./controllers/logger.controller');
-let TwCcontroller = require('./controllers/twitter.controller');
+let TwController = require('./controllers/twitter.controller');
 
 const parseString   = require('xml2js').parseString
 const mysql         = require('mysql')
@@ -25,7 +25,7 @@ const DDIR  = './downloads/'
  * Main Application logic
  */
 function main() {
-    TwCli = new TwCcontroller(
+    TwCli = new TwController(
         process.env.TWITTER_CONSUMER_KEY,
         process.env.TWITTER_CONSUMER_SECRET,
         process.env.TWITTER_ACCESS_TOKEN_KEY,
