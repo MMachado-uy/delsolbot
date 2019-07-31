@@ -2,13 +2,12 @@ const env = require('dotenv').config().parsed
 
 let Logger = require('./controllers/logger.controller');
 let TwController = require('./controllers/twitter.controller');
+let DbController = require('./controllers/db.controller');
 
 const parseString   = require('xml2js').parseString
-const mysql         = require('mysql')
 const eachOf        = require('async/eachOf')
 const NodeID3       = require('node-id3')
 const rimraf        = require('rimraf')
-
 var CronJob         = require('cron').CronJob
 var fs              = require('fs')
 var request         = require('request')
@@ -16,8 +15,11 @@ var requestP        = require('request-promise-native')
 
 const COVER = './assets/cover.jpg'
 const DDIR  = './downloads/'
+const ENV   = process.env.ENV;
+const CRON  = process.env.CRON;
+const DB    = new DbController();
 
-// new CronJob('0 */30 * * * *', () => {
+// new CronJob(CRON, () => {
     main()
 // }, null, true)
 
@@ -34,10 +36,10 @@ function main() {
 
     cleanDownloads()
     .then(() => {
-       return getRssList()
+       return DB.getRssList()
     }).then(res => {
         if (res.length) {
-            return getStoredPodcasts()
+            return DB.getStoredPodcasts()
             .then(storedPodcasts => {
 
                 eachOf(res, (value, key, callback) => {
@@ -306,7 +308,7 @@ function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
             disable_notification: 'true',
             parse_mode: 'html',
             caption,
-            chat_id: 'ALJ3F0y08aDtRT7ayflIEQ',
+            chat_id: ENV === 'prod' ? chat_id : process.env.TEST_CHANNEL,
             performer,
             title
         }
@@ -367,169 +369,6 @@ function cleanDownloads() {
                 fs.mkdirSync(DDIR)
                 resolve()
             }
-        })
-    })
-}
-
-/******************************************************************************/
-/******************************  DATABASE ACCESS  *****************************/
-/******************************************************************************/
-
-/**
- * Get a new database connection
- * @returns {Promise} A new database connection, or error message
- */
-function getConnection() {
-    return new Promise((resolve, reject) => {
-        var con = mysql.createConnection({
-            host     : env.DB_HOST,
-            port     : env.DB_PORT,
-            user     : env.DB_USER,
-            password : env.DB_PASS,
-            database : env.DB
-        })
-
-        con.connect(err => {
-            if (err) {
-                reject(['getConnection', err])
-            } else {
-                resolve(con)
-            }
-        })
-    })
-}
-
-/**
- * Closes/destroys a database connection
- * @param {Object} con - A database connection to close/destroy
- */
-function closeConnection(con) {
-    con.destroy()
-}
-
-/**
- * Register in the database the upload response for each podcast
- * @param {string} archivo - Name of the file to register
- * @param {string} obs - A comment
- * @param {boolean} exito - The status of the upload
- * @param {string} fileId - The id returned by Telegram
- * @returns {Promise} The rows affected by the insert, or error message
- */
-function registerUpload(archivo, obs = '', exito, fileId = '') {
-    return new Promise((resolve, reject) => {
-
-        exito = (exito ? 1 : 0)
-        obs = sanitizeContent(obs)
-
-        getConnection().then(con => {
-            con.query({
-                sql: 'INSERT INTO `podcasts` (archivo, obs, pudo_subir, file_id) VALUES (?, ?, ?, ?)',
-                timeout: 40000,
-                values: [archivo,  obs, exito, fileId]
-            }, (err, results) => {
-                closeConnection(con)
-                if (err) {
-                    reject([`${archivo} registerUpload`, err])
-                } else {
-                    resolve(results)
-                }
-            })
-        }).catch(err => {
-            reject([`${archivo} getConnection`, err])
-        })
-    })
-}
-
-/**
- * Get the RSS sources list
- * @returns {Promise} The list of RSS sources url's, or error message
- */
-function getRssList() {
-    return new Promise((resolve, reject) => {
-        getConnection().then(con => {
-            con.query({
-                sql: 'SELECT url, channel FROM `sources`',
-                timeout: 40000
-            }, (err, results) => {
-                closeConnection(con)
-
-                if (err) {
-                    reject(['getRssList', err])
-                } else {
-                    resolve(results)
-                }
-            })
-        })
-    })
-}
-
-/**
- * Get a single podcast upload status
- * @param {string} name - The filename of the podcast to search
- * @returns {Promise} The row representation of the status of the given podcast, or error message
- */
-function getPodcastByName(name) {
-    return new Promise((resolve, reject) => {
-        getConnection().then(con => {
-            con.query({
-                sql: 'SELECT * FROM `podcasts` WHERE `archivo` = ?',
-                timeout: 40000,
-                values: [name]
-            }, (err, results) => {
-                closeConnection(con)
-
-                if (err) {
-                    reject(['getPodcastByName', err])
-                } else {
-                    resolve(results)
-                }
-            })
-        })
-    })
-}
-
-/**
- * Get the list of the failed uploads
- * @returns {Promise} The list of the uploads rejected by Telegram, or error message
- */
-function getFailedPodcasts() {
-    return new Promise((resolve, reject) => {
-        getConnection().then(con => {
-            con.query({
-                sql: 'SELECT * FROM `podcasts` WHERE `pudo_subir` = 0',
-                timeout: 40000
-            }, (err, results) => {
-                closeConnection(con)
-
-                if (err) {
-                    reject(['getFailedPodcasts', err])
-                } else {
-                    resulve(results)
-                }
-            })
-        })
-    })
-}
-
-/**
- * Get the identifiers for the podcasts
- * @returns {Promise} The stored podcasts, or error message
- */
-function getStoredPodcasts() {
-    return new Promise((resolve, reject) => {
-        getConnection().then(con => {
-            con.query({
-                sql: 'SELECT id, archivo FROM `podcasts`',
-                timeout: 40000,
-            }, (err, results) => {
-                closeConnection(con)
-
-                if (err) {
-                    reject(['getStoredPodcasts', err])
-                } else {
-                    resolve(results)
-                }
-            })
         })
     })
 }
