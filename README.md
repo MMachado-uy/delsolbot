@@ -33,8 +33,8 @@ Instructions to clone and run this project in a local environment.
 
 ### Requisitos / Requirements
 
-- Node 10
-- Npm 6.4
+- Node 10+
+- Npm 6.4+
 - MySql
 
 ### Instalar / Installing
@@ -45,12 +45,19 @@ Instructions to clone and run this project in a local environment.
 - Dentro de la carpeta del proyecto ejecuta `$ npm install`
 - Ejecutar los scripts contenidos en `./database/`
 - Crear un archivo _.env_ con los siguientes parametros:
-    - DB
-    - DB_USER
-    - DB_PASS
-    - DB_PORT
-    - DB_HOST
-    - BOT_TOKEN
+  - DB
+  - DB_USER
+  - DB_PASS
+  - DB_PORT
+  - DB_HOST
+  - TWITTER_CONSUMER_KEY
+  - TWITTER_CONSUMER_SECRET
+  - TWITTER_ACCESS_TOKEN_KEY
+  - TWITTER_ACCESS_TOKEN_SECRET
+  - BOT_TOKEN
+  - TEST_CHANNEL
+  - ENV
+  - CRON
 - En la raíz del proyecto ejecutar `$ node app.js`
 
 [EN]
@@ -59,12 +66,19 @@ Instructions to clone and run this project in a local environment.
 - In the project's folder, run `$ npm install`
 - Run the sql scripts in `./database/`
 - Create a _.env_ file with the following entries:
-    - DB
-    - DB_USER
-    - DB_PASS
-    - DB_PORT
-    - DB_HOST
-    - BOT_TOKEN
+  - DB
+  - DB_USER
+  - DB_PASS
+  - DB_PORT
+  - DB_HOST
+  - TWITTER_CONSUMER_KEY
+  - TWITTER_CONSUMER_SECRET
+  - TWITTER_ACCESS_TOKEN_KEY
+  - TWITTER_ACCESS_TOKEN_SECRET
+  - BOT_TOKEN
+  - TEST_CHANNEL
+  - ENV
+  - CRON
 - To run the script itself, run `$ node app.js`
 
 ***Importante: para ejecuciones en ambiente local, redirigir los posteos a un canal de Testing***
