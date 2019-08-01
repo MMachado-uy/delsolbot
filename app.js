@@ -1,17 +1,18 @@
 const env = require('dotenv').config().parsed
 
-let Logger = require('./controllers/logger.controller');
+let Logger       = require('./controllers/logger.controller');
 let TwController = require('./controllers/twitter.controller');
 let DbController = require('./controllers/db.controller');
+let Utils        = require('./utils');
 
-const parseString   = require('xml2js').parseString
-const eachOf        = require('async/eachOf')
-const NodeID3       = require('node-id3')
-const rimraf        = require('rimraf')
-var CronJob         = require('cron').CronJob
-var fs              = require('fs')
-var request         = require('request')
-var requestP        = require('request-promise-native')
+const parseString = require('xml2js').parseString
+const eachOf      = require('async/eachOf')
+const NodeID3     = require('node-id3')
+const rimraf      = require('rimraf')
+var CronJob       = require('cron').CronJob
+var fs            = require('fs')
+var request       = require('request')
+var requestP      = require('request-promise-native')
 
 const COVER = './assets/cover.jpg'
 const DDIR  = './downloads/'
@@ -19,9 +20,13 @@ const ENV   = process.env.ENV;
 const CRON  = process.env.CRON;
 const DB    = new DbController();
 
-// new CronJob(CRON, () => {
-    main()
-// }, null, true)
+if (ENV === 'prod') {
+    new CronJob(CRON, () => {
+        main()
+    }, null, true)
+} else {
+    main();
+}
 
 /**
  * Main Application logic
@@ -170,8 +175,8 @@ function sendFeedToTelegram(feed, channel) {
 
             let { title, desc, url, archivo, imagen } = value;
             let content = `<b>${title}</b>\n${desc}`
-            let folder = sanitizeContent(feedTitle)
-            let episodePath = `${DDIR}${folder}/${sanitizeEpisode(title)}.mp3`
+            let folder = Utils.sanitizeContent(feedTitle)
+            let episodePath = `${DDIR}${folder}/${Utils.sanitizeEpisode(title)}.mp3`
             let message_id = ''
             let imagePath;
 
@@ -190,7 +195,7 @@ function sendFeedToTelegram(feed, channel) {
 
                 message_id = res.message_id
 
-                return registerUpload(archivo, '', true, res.file_id)
+                return DB.registerUpload(archivo, '', true, res.file_id)
             }).then(() => {
                 return downloadImage(imagen, episodePath, folder)
             }).then((imagePath) =>{
@@ -200,7 +205,7 @@ function sendFeedToTelegram(feed, channel) {
             }).catch((err) => {
 
                 Logger.log(false, `${archivo} Failed to upload. ${err}`)
-                registerUpload(archivo, err, false, '')
+                DB.registerUpload(archivo, err, false, '')
                 .then(err => {
                     callback(err)
                 }).catch(err => {
@@ -332,32 +337,6 @@ function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
             reject([`${performer} - ${title} sendEpisodeToChannel`, err.message])
         })
     })
-}
-
-function sanitizeEpisode(episodeTitle) {
-    return episodeTitle.replace(new RegExp('/','g'),'-').trim()
-}
-
-function sanitizeContent(str) {
-    if (typeof str !== 'string') {
-        str = {
-            nonstring: str
-        }
-
-        str = JSON.stringify(str)
-    }
-    return str
-            .replace(/"/gi,'&quot;')
-            .replace(/&/gi,'&amp;')
-            .replace(/</gi,'&lt;')
-            .replace(/>/gi,'&gt;')
-            .replace(/'/gi,'')
-            .replace(/ /gi,'_')
-            .replace(/á/gi,'a')
-            .replace(/é/gi,'e')
-            .replace(/í/gi,'i')
-            .replace(/ó/gi,'o')
-            .replace(/ú/gi,'u')
 }
 
 function cleanDownloads() {

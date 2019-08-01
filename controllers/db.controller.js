@@ -1,4 +1,5 @@
 const mysql = require('mysql')
+let Utils = require('../utils');
 
 module.exports = class Db {
     /**
@@ -45,7 +46,7 @@ module.exports = class Db {
         return new Promise((resolve, reject) => {
 
             exito = (exito ? 1 : 0)
-            obs = sanitizeContent(obs)
+            obs = Utils.parseResponse(obs)
 
             this.getConnection().then(con => {
                 con.query({
