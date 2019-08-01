@@ -27,7 +27,7 @@ module.exports = class Utils {
     static parseResponse(response) {
         let result = '';
 
-        if (response.includes('413_Request_Entity_Too_Large')) {
+        if (response.indexOf('413_Request_Entity_Too_Large') > -1) {
             result = 'file_too_large';
         }
 

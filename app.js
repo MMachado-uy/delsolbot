@@ -72,6 +72,8 @@ function main() {
         }
     }).catch(err => {
         Logger.log(false, `Database connection error: ${err.message}`)
+    }).finally(() => {
+        cleanDownloads();
     })
 }
 
@@ -199,11 +201,16 @@ function sendFeedToTelegram(feed, channel) {
             }).then(() => {
                 return downloadImage(imagen, episodePath, folder)
             }).then((imagePath) =>{
-                return TwCli.tweetit(message_id, imagePath, title, channel)
+                if (ENV === 'prod') {
+                    return TwCli.tweetit(message_id, imagePath, title, channel)
+                } else {
+                    return new Promise(resolve => {
+                        resolve();
+                    });
+                }
             }).then(() => {
                 callback()
             }).catch((err) => {
-
                 Logger.log(false, `${archivo} Failed to upload. ${err}`)
                 DB.registerUpload(archivo, err, false, '')
                 .then(err => {
@@ -267,11 +274,11 @@ function downloadImage(imageUrl, imagePath, folder) {
         if (imageUrl === '') {
             resolve(COVER)
         } else {
-            request.head(uri, (err, res, body) => {
+            request.head(imageUrl, (err, res, body) => {
                 if (!err) {
-                    request(uri)
-                    .pipe(fs.createWriteStream(filename))
-                    .on('close', resolve(imagePath));
+                    request(imageUrl)
+                    .pipe(fs.createWriteStream(imagePath))
+                    .on('close', () => resolve(imagePath));
                 } else {
                     reject([`${imageUrl} downloadImage`, `Connection error: ${error}`]);
                 }

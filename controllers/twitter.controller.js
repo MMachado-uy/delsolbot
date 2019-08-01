@@ -1,4 +1,5 @@
 const Twitter = require('twitter')
+var fs = require('fs')
 
 module.exports = class TwController {
 
@@ -21,9 +22,9 @@ module.exports = class TwController {
      */
     tweetit(message_id, imagen, titulo, canal) {
         return new Promise((resolve, reject) => {
-            subirMedia(imagen)
+            this.subirMedia(imagen)
             .then(res => {
-                return tweet(res, message_id, titulo, canal)
+                return this.tweet(res, message_id, titulo, canal)
             })
             .then(res => {
                 resolve()
@@ -41,15 +42,15 @@ module.exports = class TwController {
      */
     subirMedia(filePath = 'cover.jpg') {
 
-        let media = fs.readFileSync(filePath)
-        let media_data = new Buffer(media).toString('base64')
+        let media = fs.readFileSync(filePath);
+        let media_data = fs.readFileSync(filePath, {encoding: 'base64'});
 
         let payload = {
             media,
             media_data
-        }
+        };
 
-        return this.TwCli.post('media/upload', payload)
+        return this.TwCli.post('media/upload', payload);
     }
 
     /**
@@ -62,7 +63,7 @@ module.exports = class TwController {
     tweet(imagen, message_id, titulo, canal) {
         canal = canal.substr(1, canal.length)
         let url = `https://t.me/${canal}/${message_id}`
-        let cuerpo = `\nTe lo perdiste? Está en Telegram: `
+        let cuerpo = `\n¿Te lo perdiste? Está en Telegram: `
         let hashtags = `\n#DelSolEnTelegram #DelSol`
         let status = `${titulo}${cuerpo}${url}${hashtags}`
 
