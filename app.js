@@ -1,23 +1,23 @@
 const env = require('dotenv').config().parsed
 
-let Logger       = require('./controllers/logger.controller');
-let TwController = require('./controllers/twitter.controller');
-let DbController = require('./controllers/db.controller');
-let Utils        = require('./utils');
+const Logger       = require('./controllers/logger.controller');
+const TwController = require('./controllers/twitter.controller');
+const DbController = require('./controllers/db.controller');
+const Utils        = require('./utils');
 
 const parseString = require('xml2js').parseString
 const eachOf      = require('async/eachOf')
 const NodeID3     = require('node-id3')
 const rimraf      = require('rimraf')
-var CronJob       = require('cron').CronJob
-var fs            = require('fs')
-var request       = require('request')
-var requestP      = require('request-promise-native')
+const CronJob     = require('cron').CronJob
+const fs          = require('fs')
+const request     = require('request')
+const requestP    = require('request-promise-native')
 
 const COVER = './assets/cover.jpg'
 const DDIR  = './downloads/'
-const ENV   = process.env.ENV;
 const CRON  = process.env.CRON;
+const ENV   = process.env.ENV;
 const DB    = new DbController();
 
 if (ENV === 'prod') {
@@ -31,7 +31,7 @@ if (ENV === 'prod') {
 /**
  * Main Application logic
  */
-function main() {
+async function main() {
     TwCli = new TwController(
         process.env.TWITTER_CONSUMER_KEY,
         process.env.TWITTER_CONSUMER_SECRET,
@@ -54,9 +54,13 @@ function main() {
                     .then(feed => {
                         return ignoreUploadedPodcasts(feed, storedPodcasts)
                     }).then(feed => {
-                        return parseFeed(feed)
-                    }).then(feed => {
-                        return sendFeedToTelegram(feed, channel)
+                        let parsedFeed = parseFeed(feed)
+
+                        if (!!parsedFeed.length) {
+                            return sendFeedToTelegram(parsedFeed, channel)
+                        } else {
+                            callback([`${title} parseFeed`, 'Nothing to upload'])
+                        }
                     }).then(() => {
                         callback()
                     }).catch((error) => {
@@ -135,31 +139,25 @@ function ignoreUploadedPodcasts(feed, storedPodcasts) {
  * @returns {Promise}
  */
 function parseFeed(feed) {
-    return new Promise((resolve, reject) => {
-        let rawFeed = feed.item
-        let parsedFeed = []
-        let title = feed.title[0]
+    let rawFeed = feed.item
+    let parsedFeed = []
+    let title = feed.title[0]
 
-        for (let item of rawFeed) {
-            let imagen = item['itunes:image'][0].$.href
+    for (let item of rawFeed) {
+        let imagen = item['itunes:image'][0].$.href
 
-            let parsedItem = {
-                title: item.title[0],
-                desc: item.description[0],
-                url: item.link[0],
-                archivo: item.link[0].substring(item.link[0].lastIndexOf("/") + 1, item.link[0].lastIndexOf(".mp3")),
-                imagen
-            }
-
-            parsedFeed.push(parsedItem)
+        let parsedItem = {
+            title: item.title[0],
+            desc: item.description[0],
+            url: item.link[0],
+            archivo: item.link[0].substring(item.link[0].lastIndexOf("/") + 1, item.link[0].lastIndexOf(".mp3")),
+            imagen
         }
 
-        if (parsedFeed.length) {
-            resolve({title,parsedFeed})
-        } else {
-            reject([`${title} parseFeed`, 'Nothing to upload'])
-        }
-    })
+        parsedFeed.push(parsedItem)
+    }
+
+    return {title,parsedFeed}
 }
 
 /**
@@ -168,20 +166,19 @@ function parseFeed(feed) {
  * @param {String} channel - El nombre del canal que se esta procesando
  * @returns {Promise}
  */
-function sendFeedToTelegram(feed, channel) {
+async function sendFeedToTelegram(feed, channel) {
     return new Promise((resolve, reject) => {
-        let feedTitle = feed.title
-        let feedItems = feed.parsedFeed
+        let { title: feedTitle, parsedFeed: feedItems } = feed;
 
-        eachOf(feedItems, (value, key, callback) => {
-
-            let { title, desc, url, archivo, imagen } = value;
+        while (!!feedItems.length) {
+            const feedItem = feedItems.pop();
+            let { title, desc, url, archivo, imagen } = feedItem;
             let content = `<b>${title}</b>\n${desc}`
             let folder = Utils.sanitizeContent(feedTitle)
             let episodePath = `${DDIR}${folder}/${Utils.sanitizeEpisode(title)}.mp3`
             let message_id = ''
             let imagePath;
-
+            
             if (content.length > 200) {
                 content = content.substring(0, 197)
                 content += '...'
@@ -219,13 +216,61 @@ function sendFeedToTelegram(feed, channel) {
                     callback(err)
                 })
             })
-        }, err => {
-            if (err) {
-                reject([`${feedTitle} sendFeedToTelegram`, err])
-            } else {
-                resolve()
-            }
-        })
+        }
+
+        // eachOf(feedItems, (value, key, callback) => {
+
+        //     let { title, desc, url, archivo, imagen } = value;
+        //     let content = `<b>${title}</b>\n${desc}`
+        //     let folder = Utils.sanitizeContent(feedTitle)
+        //     let episodePath = `${DDIR}${folder}/${Utils.sanitizeEpisode(title)}.mp3`
+        //     let message_id = ''
+        //     let imagePath;
+
+        //     if (content.length > 200) {
+        //         content = content.substring(0, 197)
+        //         content += '...'
+        //     }
+
+        //     downloadEpisode(url, episodePath, folder)
+        //     .then((episodePath) => {
+        //         return editMetadata(feedTitle, title, content, episodePath)
+        //     }).then((episodePath) => {
+        //         return sendEpisodeToChannel(episodePath, content, channel, feedTitle, title)
+        //     }).then((res) => {
+        //         Logger.log(true, `${archivo} Uploaded`)
+
+        //         message_id = res.message_id
+
+        //         return DB.registerUpload(archivo, '', true, res.file_id)
+        //     }).then(() => {
+        //         return downloadImage(imagen, episodePath, folder)
+        //     }).then((imagePath) =>{
+        //         if (ENV === 'prod') {
+        //             return TwCli.tweetit(message_id, imagePath, title, channel)
+        //         } else {
+        //             return new Promise(resolve => {
+        //                 resolve();
+        //             });
+        //         }
+        //     }).then(() => {
+        //         callback()
+        //     }).catch((err) => {
+        //         Logger.log(false, `${archivo} Failed to upload. ${err}`)
+        //         DB.registerUpload(archivo, err, false, '')
+        //         .then(err => {
+        //             callback(err)
+        //         }).catch(err => {
+        //             callback(err)
+        //         })
+        //     })
+        // }, err => {
+        //     if (err) {
+        //         reject([`${feedTitle} sendFeedToTelegram`, err])
+        //     } else {
+        //         resolve()
+        //     }
+        // })
     })
 }
 
@@ -236,7 +281,7 @@ function sendFeedToTelegram(feed, channel) {
  * @param {String} folder - El nombre de la carpeta a descargar
  * @returns {Promise} La ruta local del episodio
  */
-function downloadEpisode(episodeUrl, episodePath, folder) {
+async function downloadEpisode(episodeUrl, episodePath, folder) {
     return new Promise((resolve, reject) => {
 
         if (!fs.existsSync(`${DDIR}${folder}`)) {
@@ -264,12 +309,10 @@ function downloadEpisode(episodeUrl, episodePath, folder) {
  * @param {String} folder - El nombre de la carpeta a descargar
  * @returns {Promise} La ruta local de la imagen
  */
-function downloadImage(imageUrl, imagePath, folder) {
+async function downloadImage(imageUrl, imagePath, folder) {
     return new Promise((resolve, reject) => {
 
-        if (!fs.existsSync(`${DDIR}${folder}`)) {
-            fs.mkdirSync(`${DDIR}${folder}`)
-        }
+        if (!fs.existsSync(`${DDIR}${folder}`)) fs.mkdirSync(`${DDIR}${folder}`);
 
         if (imageUrl === '') {
             resolve(COVER)
@@ -288,13 +331,13 @@ function downloadImage(imageUrl, imagePath, folder) {
 }
 
 /**
- * Procesa la metadata idv3 de un episodio para generar datos coherentes con su contenido
- * @param {String} artist - El nombre del Programa, a popular el campo 'artista'
- * @param {String} title - El nombre del episodio, a popular el campo 'title'
- * @param {String} comment - La descripcion del episodio, a popular el campo 'comment'
- * @param {String} episodePath - La ruta completa donde esta guardado el episodio
+ * Writes an episode's idv3 metadata to create content-coherent data
+ * @param {String} artist - Show's name, mapped to the 'artist' field
+ * @param {String} title - Episode's naem, mapped to the 'title' field
+ * @param {String} comment - Episode's description, mapped to the 'comment' field
+ * @param {String} episodePath -The episode's path
  */
-function editMetadata(artist, title, comment, episodePath) {
+async function editMetadata(artist, title, comment, episodePath) {
     return new Promise((resolve, reject) => {
         let tags = {
             artist,
@@ -304,18 +347,15 @@ function editMetadata(artist, title, comment, episodePath) {
         }
 
         NodeID3.write(tags, episodePath, (err, buffer) => {
-            if (!err) {
-                resolve(episodePath)
-            } else {
-                reject([`${artist} - ${title} editMetadata`, err])
-            }
+            if (!err) resolve(episodePath);
+            else reject([`${artist} - ${title} editMetadata`, err]);
         })
     })
 }
 
-function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
+async function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
     return new Promise ((resolve, reject) => {
-        let payload = {
+        const payload = {
             audio: fs.createReadStream(episodePath),
             disable_notification: 'true',
             parse_mode: 'html',
@@ -333,27 +373,25 @@ function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
             json: true
         }).then((res) => {
             fs.unlink(episodePath, err => {
-                if (err) {
-                    reject([`${performer} - ${title} sendEpisodeToChannel`, err])
-                } else {
-                    resolve({ file_id: res.result.audio.file_id, message_id: res.result.message_id })
-                }
+                if (err) reject([`${performer} - ${title} sendEpisodeToChannel`, err]);
+                else resolve({ file_id: res.result.audio.file_id, message_id: res.result.message_id });
             })
         }).catch(err => {
-            fs.unlinkSync(episodePath)
-            reject([`${performer} - ${title} sendEpisodeToChannel`, err.message])
+            fs.unlinkSync(episodePath);
+            reject([`${performer} - ${title} sendEpisodeToChannel`, err.message]);
         })
     })
 }
 
-function cleanDownloads() {
+async function cleanDownloads() {
     return new Promise((resolve, reject) => {
         rimraf(DDIR, (err) => {
-            if (err) {
-                reject(['cleanDownloads', err])
-            } else {
-                fs.mkdirSync(DDIR)
-                resolve()
+            if (err) reject(['cleanDownloads', err]);
+            else {
+                fs.mkdir(DDIR, (err) => {
+                    if (!err) resolve();
+                    else reject(['cleanDownloads > mkdir', err]);
+                })
             }
         })
     })
