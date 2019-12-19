@@ -135,8 +135,8 @@ const ignoreUploadedPodcasts = async (feed, storedPodcasts) => {
  * @param {Object} feed - El Feed sin los episodios ya procesados con anterioridad y el resto de la metadata
  * @returns {Promise}
  */
-function parseFeed(feed) {
-    let rawFeed = feed.item
+const parseFeed = async feed => {
+    const rawFeed = feed.item
     let parsedFeed = []
     let title = feed.title[0]
 
@@ -181,7 +181,7 @@ const sendFeedToTelegram = async (feed, channel) => {
                 content += '...'
             }
 
-            downloadEpisode(url, episodePath, folder)
+            const episodePath = await downloadEpisode(url, episodePath, folder);
             .then((episodePath) => {
                 return editMetadata(feedTitle, title, content, episodePath)
             }).then((episodePath) => {
@@ -278,24 +278,17 @@ const sendFeedToTelegram = async (feed, channel) => {
  * @param {String} folder - El nombre de la carpeta a descargar
  * @returns {Promise} La ruta local del episodio
  */
-async function downloadEpisode(episodeUrl, episodePath, folder) {
+const downloadEpisode = async (episodeUrl, episodePath, folder) => {
     return new Promise((resolve, reject) => {
+        if (!fs.existsSync(`${DDIR}${folder}`)) fs.mkdirSync(`${DDIR}${folder}`);
 
-        if (!fs.existsSync(`${DDIR}${folder}`)) {
-            fs.mkdirSync(`${DDIR}${folder}`)
-        }
+        const stream = fs.createWriteStream(episodePath);
 
-        let stream = fs.createWriteStream(episodePath)
+        const response = await axios.get(episodeUrl, {responseType: 'stream'});
+        response.data.pipe(stream);
 
-        request.get(episodeUrl, (error, response, body) => {
-            if (!error) {
-                stream.close()
-                resolve(episodePath)
-            } else {
-                reject([`${episodeUrl} downloadEpisode`, `Connection error: ${error}`])
-            }
-        })
-        .pipe(stream)
+        stream.on('finish', resolve(episodePath));
+        stream.on('error', reject('downloadEpisode', `Unable to download episode\nEpisode url: ${episodeUrl}`));
     })
 }
 
@@ -306,23 +299,20 @@ async function downloadEpisode(episodeUrl, episodePath, folder) {
  * @param {String} folder - El nombre de la carpeta a descargar
  * @returns {Promise} La ruta local de la imagen
  */
-async function downloadImage(imageUrl, imagePath, folder) {
+const downloadImage = async (imageUrl, imagePath, folder) => {
     return new Promise((resolve, reject) => {
-
         if (!fs.existsSync(`${DDIR}${folder}`)) fs.mkdirSync(`${DDIR}${folder}`);
 
         if (imageUrl === '') {
             resolve(COVER)
         } else {
-            request.head(imageUrl, (err, res, body) => {
-                if (!err) {
-                    request(imageUrl)
-                    .pipe(fs.createWriteStream(imagePath))
-                    .on('close', () => resolve(imagePath));
-                } else {
-                    reject([`${imageUrl} downloadImage`, `Connection error: ${error}`]);
-                }
-            });
+            const stream = fs.createWriteStream(imagePath);
+
+            const response = await axios.get(imageUrl, {responseType: 'stream'});
+            response.data.pipe(stream);
+    
+            stream.on('finish', resolve(imagePath));
+            stream.on('error', reject('downloadImage', `Unable to download cover image\nImage url: ${imageUrl}`));
         }
     })
 }
@@ -334,7 +324,7 @@ async function downloadImage(imageUrl, imagePath, folder) {
  * @param {String} comment - Episode's description, mapped to the 'comment' field
  * @param {String} episodePath -The episode's path
  */
-async function editMetadata(artist, title, comment, episodePath) {
+const editMetadata = async (artist, title, comment, episodePath) => {
     return new Promise((resolve, reject) => {
         let tags = {
             artist,
@@ -350,7 +340,7 @@ async function editMetadata(artist, title, comment, episodePath) {
     })
 }
 
-async function sendEpisodeToChannel(episodePath, caption, chat_id, performer, title) {
+const sendEpisodeToChannel = async (episodePath, caption, chat_id, performer, title) => {
     return new Promise ((resolve, reject) => {
         const payload = {
             audio: fs.createReadStream(episodePath),
@@ -365,8 +355,7 @@ async function sendEpisodeToChannel(episodePath, caption, chat_id, performer, ti
         let connectcionUrl = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio`
 
         try {
-            const response = await axios({
-                method: 'post',
+            const response = await axios.post({
                 url: connectcionUrl,
                 data: payload
             })
@@ -391,7 +380,7 @@ async function sendEpisodeToChannel(episodePath, caption, chat_id, performer, ti
     })
 }
 
-async function cleanDownloads() {
+const cleanDownloads = () => {
     return new Promise((resolve, reject) => {
         rimraf(DDIR, err => {
             if (err) reject(['cleanDownloads', err]);
