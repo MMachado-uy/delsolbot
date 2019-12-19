@@ -1,12 +1,14 @@
 const mysql = require('mysql')
-let Utils = require('../utils');
+const {
+    parseResponse
+} = require('../utils');
 
 module.exports = class Db {
     /**
      * Get a new database connection
      * @returns {Promise} A new database connection, or error message
      */
-    getConnection() {
+    async getConnection() {
         return new Promise((resolve, reject) => {
             var con = mysql.createConnection({
                 host     : process.env.DB_HOST,
@@ -31,7 +33,7 @@ module.exports = class Db {
      * @param {Object} con - A database connection to close/destroy
      */
     closeConnection(con) {
-        con.destroy()
+        con.destroy();
     }
 
     /**
@@ -45,25 +47,25 @@ module.exports = class Db {
     registerUpload(archivo, obs = '', exito, fileId = '') {
         return new Promise((resolve, reject) => {
 
-            exito = (exito ? 1 : 0)
-            obs = Utils.parseResponse(obs)
+            exito = (exito ? 1 : 0);
+            obs = parseResponse(obs);
 
-            this.getConnection().then(con => {
-                con.query({
-                    sql: 'INSERT INTO `podcasts` (archivo, obs, pudo_subir, file_id) VALUES (?, ?, ?, ?)',
-                    timeout: 40000,
-                    values: [archivo,  obs, exito, fileId]
-                }, (err, results) => {
-                    this.closeConnection(con)
-                    if (err) {
-                        reject([`${archivo} registerUpload`, err])
-                    } else {
-                        resolve(results)
-                    }
-                })
-            }).catch(err => {
-                reject([`${archivo} getConnection`, err])
+            const con  = await this.getConnection();
+            con.query({
+                sql: 'INSERT INTO `podcasts` (archivo, obs, pudo_subir, file_id) VALUES (?, ?, ?, ?)',
+                timeout: 40000,
+                values: [archivo,  obs, exito, fileId]
+            }, (err, results) => {
+                this.closeConnection(con);
+
+                if (err) {
+                    reject([`${archivo} registerUpload`, err]);
+                } else {
+                    resolve(results);
+                }
             })
+        }).catch(err => {
+            reject([`${archivo} getConnection`, err]);
         })
     }
 
@@ -73,19 +75,18 @@ module.exports = class Db {
      */
     getRssList() {
         return new Promise((resolve, reject) => {
-            this.getConnection().then(con => {
-                con.query({
-                    sql: 'SELECT url, channel FROM `sources`',
-                    timeout: 40000
-                }, (err, results) => {
-                    this.closeConnection(con)
+            const con = await this.getConnection();
+            con.query({
+                sql: 'SELECT url, channel FROM `sources`',
+                timeout: 40000
+            }, (err, results) => {
+                this.closeConnection(con);
 
-                    if (err) {
-                        reject(['getRssList', err])
-                    } else {
-                        resolve(results)
-                    }
-                })
+                if (err) {
+                    reject(['getRssList', err]);
+                } else {
+                    resolve(results);
+                }
             })
         })
     }
@@ -97,20 +98,19 @@ module.exports = class Db {
      */
     getPodcastByName(name) {
         return new Promise((resolve, reject) => {
-            this.getConnection().then(con => {
-                con.query({
-                    sql: 'SELECT * FROM `podcasts` WHERE `archivo` = ?',
-                    timeout: 40000,
-                    values: [name]
-                }, (err, results) => {
-                    this.closeConnection(con)
+            const con = await this.getConnection();
+            con.query({
+                sql: 'SELECT * FROM `podcasts` WHERE `archivo` = ?',
+                timeout: 40000,
+                values: [name]
+            }, (err, results) => {
+                this.closeConnection(con);
 
-                    if (err) {
-                        reject(['getPodcastByName', err])
-                    } else {
-                        resolve(results)
-                    }
-                })
+                if (err) {
+                    reject(['getPodcastByName', err]);
+                } else {
+                    resolve(results);
+                }
             })
         })
     }
@@ -121,19 +121,18 @@ module.exports = class Db {
      */
     getFailedPodcasts() {
         return new Promise((resolve, reject) => {
-            this.getConnection().then(con => {
-                con.query({
-                    sql: 'SELECT * FROM `podcasts` WHERE `pudo_subir` = 0',
-                    timeout: 40000
-                }, (err, results) => {
-                    this.closeConnection(con)
+            const con = await this.getConnection();
+            con.query({
+                sql: 'SELECT * FROM `podcasts` WHERE `pudo_subir` = 0',
+                timeout: 40000
+            }, (err, results) => {
+                this.closeConnection(con);
 
-                    if (err) {
-                        reject(['getFailedPodcasts', err])
-                    } else {
-                        resulve(results)
-                    }
-                })
+                if (err) {
+                    reject(['getFailedPodcasts', err]);
+                } else {
+                    resolve(results);
+                }
             })
         })
     }
@@ -144,19 +143,18 @@ module.exports = class Db {
      */
     getStoredPodcasts() {
         return new Promise((resolve, reject) => {
-            this.getConnection().then(con => {
-                con.query({
-                    sql: 'SELECT id, archivo FROM `podcasts`',
-                    timeout: 40000,
-                }, (err, results) => {
-                    this.closeConnection(con)
+            const con = await this.getConnection();
+            con.query({
+                sql: 'SELECT id, archivo FROM `podcasts`',
+                timeout: 40000,
+            }, (err, results) => {
+                this.closeConnection(con);
 
-                    if (err) {
-                        reject(['getStoredPodcasts', err])
-                    } else {
-                        resolve(results)
-                    }
-                })
+                if (err) {
+                    reject(['getStoredPodcasts', err]);
+                } else {
+                    resolve(results);
+                }
             })
         })
     }

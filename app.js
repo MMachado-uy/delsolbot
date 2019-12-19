@@ -1,23 +1,27 @@
 const env = require('dotenv').config().parsed
 
-const Logger       = require('./controllers/logger.controller');
+const { 
+    log,
+    sanitizeContent,
+    sanitizeEpisode
+}                  = require('./lib/helpers');
 const TwController = require('./controllers/twitter.controller');
 const DbController = require('./controllers/db.controller');
-const Utils        = require('./utils');
 
-const parseString = require('xml2js').parseString
-const eachOf      = require('async/eachOf')
-const NodeID3     = require('node-id3')
-const rimraf      = require('rimraf')
-const CronJob     = require('cron').CronJob
-const fs          = require('fs')
-const request     = require('request')
-const requestP    = require('request-promise-native')
+const parseString = require('xml2js').parseString;
+const eachOf      = require('async/eachOf');
+const NodeID3     = require('node-id3');
+const rimraf      = require('rimraf');
+const CronJob     = require('cron').CronJob;
+const fs          = require('fs');
+const request     = require('request');
+const requestP    = require('request-promise-native');
+const axios       = require('axios');
 
 const COVER = './assets/cover.jpg'
 const DDIR  = './downloads/'
 const CRON  = process.env.CRON;
-const ENV   = process.env.ENV;
+const ENV   = process.env.NODE_ENV;
 const DB    = new DbController();
 
 if (ENV === 'prod') {
@@ -39,46 +43,38 @@ async function main() {
         process.env.TWITTER_ACCESS_TOKEN_SECRET
     );
 
-    cleanDownloads()
-    .then(() => {
-       return DB.getRssList()
-    }).then(res => {
-        if (res.length) {
-            return DB.getStoredPodcasts()
-            .then(storedPodcasts => {
+    try {
+        await cleanDownloads();
+    } catch (error) {
+        log('Error while cleaning Downloads folder.',error);
+    }
 
-                eachOf(res, (value, key, callback) => {
-                    let { url, channel } = value
+    const rssList = await DB.getRssList();
 
-                    getFeed(url)
-                    .then(feed => {
-                        return ignoreUploadedPodcasts(feed, storedPodcasts)
-                    }).then(feed => {
-                        let parsedFeed = parseFeed(feed)
+    if (rssList.length) {
+        const storedPodcasts = await DB.getStoredPodcasts();
 
-                        if (!!parsedFeed.length) {
-                            return sendFeedToTelegram(parsedFeed, channel)
-                        } else {
-                            callback([`${title} parseFeed`, 'Nothing to upload'])
-                        }
-                    }).then(() => {
-                        callback()
-                    }).catch((error) => {
-                        callback(error)
-                    })
+        for (const rssUrl of rssList) {
+            let { url, channel } = rssUrl
 
-                }, err => {
-                    if (err) Logger.log(false, `Some generic error situation going on here: ${err}`)
-                })
-            })
-        } else {
-            Logger.log(false, 'No sources to retrieve')
+            try {
+                let feed = await getFeed(url);
+                feed = await ignoreUploadedPodcasts(feed, storedPodcasts);
+    
+                const parsedFeed = parseFeed(feed)
+    
+                if (!!parsedFeed.length) {
+                    await sendFeedToTelegram(parsedFeed, channel)
+                } else {
+                    log(`${title} parseFeed`, 'Nothing to upload');
+                }
+            } catch (error) {
+                log('Error getting feeds.', error);
+            }
         }
-    }).catch(err => {
-        Logger.log(false, `Database connection error: ${err.message}`)
-    }).finally(() => {
-        cleanDownloads();
-    })
+    } else {
+        log('No sources to retrieve.')
+    }
 }
 
 /**
@@ -86,24 +82,22 @@ async function main() {
  * @param {string} rssUri - The url of the RSS Feed
  * @returns {Promise}
  */
-function getFeed(rssUri) {
+const getFeed = async rssUri => {
     return new Promise((resolve, reject) => {
-
-        requestP(rssUri)
-        .then(response => {
-
-            if (response) {
+        try {
+            const response = await axios.get(rssUri);
+    
+            if (!!response) {
                 parseString(response, (err, result) => {
-                    if (err) {
-                        reject(['getFeed' + rssUri, err])
-                    } else {
-                        resolve(result.rss.channel[0])
-                    }
+                    if (err) reject(['getFeed' + rssUri, err]);
+                    else resolve(result.rss.channel[0]);
                 })
             } else {
-                reject(['getFeed', 'Unable to fetch feed'])
+                reject('getFeed', `Feed ${rssUri} did not return any feeds`);
             }
-        })
+        } catch (error) {
+            reject('getFeed', `Could not retrieve feeds from \n${rssUri}\n${error}`);
+        }
     })
 }
 
@@ -113,22 +107,25 @@ function getFeed(rssUri) {
  * @param {Object} storedPodcasts - Los episodios ya procesados y guardados en la BD
  * @returns {Promise}
  */
-function ignoreUploadedPodcasts(feed, storedPodcasts) {
+const ignoreUploadedPodcasts = async (feed, storedPodcasts) => {
     return new Promise((resolve, reject) => {
         for (let sp of storedPodcasts) {
             for (let i = 0; i < feed.item.length; i++) {
-                let archivoFeed = feed.item[i].link[0].substring(feed.item[i].link[0].lastIndexOf("/") + 1, feed.item[i].link[0].lastIndexOf(".mp3"))
+                const archivoFeed = feed.item[i]
+                                        .link[0]
+                                        .substring(feed.item[i].link[0].lastIndexOf("/") + 1,
+                                        feed.item[i].link[0].lastIndexOf(".mp3"));
 
                 if (sp.archivo == archivoFeed) {
-                    feed.item.splice(i, 1)
+                    feed.item.splice(i, 1);
                 }
             }
         }
 
         if (feed.item.length) {
-            resolve(feed)
+            resolve(feed);
         } else {
-            resolve(feed)
+            resolve(feed);
         }
     })
 }
@@ -166,7 +163,7 @@ function parseFeed(feed) {
  * @param {String} channel - El nombre del canal que se esta procesando
  * @returns {Promise}
  */
-async function sendFeedToTelegram(feed, channel) {
+const sendFeedToTelegram = async (feed, channel) => {
     return new Promise((resolve, reject) => {
         let { title: feedTitle, parsedFeed: feedItems } = feed;
 
@@ -174,8 +171,8 @@ async function sendFeedToTelegram(feed, channel) {
             const feedItem = feedItems.pop();
             let { title, desc, url, archivo, imagen } = feedItem;
             let content = `<b>${title}</b>\n${desc}`
-            let folder = Utils.sanitizeContent(feedTitle)
-            let episodePath = `${DDIR}${folder}/${Utils.sanitizeEpisode(title)}.mp3`
+            let folder = sanitizeContent(feedTitle)
+            let episodePath = `${DDIR}${folder}/${sanitizeEpisode(title)}.mp3`
             let message_id = ''
             let imagePath;
             
@@ -218,59 +215,59 @@ async function sendFeedToTelegram(feed, channel) {
             })
         }
 
-        // eachOf(feedItems, (value, key, callback) => {
+        eachOf(feedItems, (value, key, callback) => {
 
-        //     let { title, desc, url, archivo, imagen } = value;
-        //     let content = `<b>${title}</b>\n${desc}`
-        //     let folder = Utils.sanitizeContent(feedTitle)
-        //     let episodePath = `${DDIR}${folder}/${Utils.sanitizeEpisode(title)}.mp3`
-        //     let message_id = ''
-        //     let imagePath;
+            let { title, desc, url, archivo, imagen } = value;
+            let content = `<b>${title}</b>\n${desc}`
+            let folder = sanitizeContent(feedTitle)
+            let episodePath = `${DDIR}${folder}/${sanitizeEpisode(title)}.mp3`
+            let message_id = ''
+            let imagePath;
 
-        //     if (content.length > 200) {
-        //         content = content.substring(0, 197)
-        //         content += '...'
-        //     }
+            if (content.length > 200) {
+                content = content.substring(0, 197)
+                content += '...'
+            }
 
-        //     downloadEpisode(url, episodePath, folder)
-        //     .then((episodePath) => {
-        //         return editMetadata(feedTitle, title, content, episodePath)
-        //     }).then((episodePath) => {
-        //         return sendEpisodeToChannel(episodePath, content, channel, feedTitle, title)
-        //     }).then((res) => {
-        //         Logger.log(true, `${archivo} Uploaded`)
+            downloadEpisode(url, episodePath, folder)
+            .then((episodePath) => {
+                return editMetadata(feedTitle, title, content, episodePath)
+            }).then((episodePath) => {
+                return sendEpisodeToChannel(episodePath, content, channel, feedTitle, title)
+            }).then((res) => {
+                Logger.log(true, `${archivo} Uploaded`)
 
-        //         message_id = res.message_id
+                message_id = res.message_id
 
-        //         return DB.registerUpload(archivo, '', true, res.file_id)
-        //     }).then(() => {
-        //         return downloadImage(imagen, episodePath, folder)
-        //     }).then((imagePath) =>{
-        //         if (ENV === 'prod') {
-        //             return TwCli.tweetit(message_id, imagePath, title, channel)
-        //         } else {
-        //             return new Promise(resolve => {
-        //                 resolve();
-        //             });
-        //         }
-        //     }).then(() => {
-        //         callback()
-        //     }).catch((err) => {
-        //         Logger.log(false, `${archivo} Failed to upload. ${err}`)
-        //         DB.registerUpload(archivo, err, false, '')
-        //         .then(err => {
-        //             callback(err)
-        //         }).catch(err => {
-        //             callback(err)
-        //         })
-        //     })
-        // }, err => {
-        //     if (err) {
-        //         reject([`${feedTitle} sendFeedToTelegram`, err])
-        //     } else {
-        //         resolve()
-        //     }
-        // })
+                return DB.registerUpload(archivo, '', true, res.file_id)
+            }).then(() => {
+                return downloadImage(imagen, episodePath, folder)
+            }).then((imagePath) =>{
+                if (ENV === 'prod') {
+                    return TwCli.tweetit(message_id, imagePath, title, channel)
+                } else {
+                    return new Promise(resolve => {
+                        resolve();
+                    });
+                }
+            }).then(() => {
+                callback()
+            }).catch((err) => {
+                Logger.log(false, `${archivo} Failed to upload. ${err}`)
+                DB.registerUpload(archivo, err, false, '')
+                .then(err => {
+                    callback(err)
+                }).catch(err => {
+                    callback(err)
+                })
+            })
+        }, err => {
+            if (err) {
+                reject([`${feedTitle} sendFeedToTelegram`, err])
+            } else {
+                resolve()
+            }
+        })
     })
 }
 
@@ -367,15 +364,26 @@ async function sendEpisodeToChannel(episodePath, caption, chat_id, performer, ti
 
         let connectcionUrl = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio`
 
+        try {
+            const response = await axios({
+                method: 'post',
+                url: connectcionUrl,
+                data: payload
+            })
+
+            fs.unlink(episodePath, err => {
+                if (err) log([`${performer} - ${title} sendEpisodeToChannel`, err]);
+                else return { file_id: response.result.audio.file_id, message_id: response.result.message_id };
+            })
+        } catch(err) {
+            fs.unlinkSync(episodePath);
+            reject([`${performer} - ${title} sendEpisodeToChannel`, err.message]);
+        }
         requestP.post({
             url: connectcionUrl,
             formData: payload,
             json: true
         }).then((res) => {
-            fs.unlink(episodePath, err => {
-                if (err) reject([`${performer} - ${title} sendEpisodeToChannel`, err]);
-                else resolve({ file_id: res.result.audio.file_id, message_id: res.result.message_id });
-            })
         }).catch(err => {
             fs.unlinkSync(episodePath);
             reject([`${performer} - ${title} sendEpisodeToChannel`, err.message]);
@@ -385,7 +393,7 @@ async function sendEpisodeToChannel(episodePath, caption, chat_id, performer, ti
 
 async function cleanDownloads() {
     return new Promise((resolve, reject) => {
-        rimraf(DDIR, (err) => {
+        rimraf(DDIR, err => {
             if (err) reject(['cleanDownloads', err]);
             else {
                 fs.mkdir(DDIR, (err) => {
