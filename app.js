@@ -1,5 +1,16 @@
 const env = require('dotenv').config().parsed
 
+const parseString = require('xml2js').parseString;
+const FormData    = require('form-data');
+const requestP    = require('request-promise-native');
+const CronJob     = require('cron').CronJob;
+const NodeID3     = require('node-id3');
+const request     = require('request');
+const eachOf      = require('async/eachOf');
+const rimraf      = require('rimraf');
+const axios       = require('axios');
+const fs          = require('fs');
+
 const { 
     log,
     sanitizeContent,
@@ -8,15 +19,7 @@ const {
 const TwController = require('./controllers/twitter.controller');
 const DbController = require('./controllers/db.controller');
 
-const parseString = require('xml2js').parseString;
-const eachOf      = require('async/eachOf');
-const NodeID3     = require('node-id3');
-const rimraf      = require('rimraf');
-const CronJob     = require('cron').CronJob;
-const fs          = require('fs');
-const request     = require('request');
-const requestP    = require('request-promise-native');
-const axios       = require('axios');
+const TEST_CHANNEL = process.env.TEST_CHANNEL;
 
 const COVER = './assets/cover.jpg'
 const DDIR  = './downloads/'
@@ -181,17 +184,22 @@ const sendFeedToTelegram = async (feed, channel) => {
                 content += '...'
             }
 
-            const episodePath = await downloadEpisode(url, episodePath, folder);
-            .then((episodePath) => {
-                return editMetadata(feedTitle, title, content, episodePath)
-            }).then((episodePath) => {
-                return sendEpisodeToChannel(episodePath, content, channel, feedTitle, title)
+            try {
+                const episodePath = await downloadEpisode(url, episodePath, folder);
+                await editMetadata(feedTitle, title, content, episodePath);
+                const telegramResponse = await sendEpisodeToChannel(episodePath, content, channel, feedTitle, title);
+                
+                Logger.log(true, `${archivo} Uploaded`);
+    
+                message_id = telegramResponse.message_id;
+    
+                DB.registerUpload(archivo, '', true, res.file_id);
+            } catch(e) {
+                Logger.log(false, `${archivo} Failed to upload. ${err}`)
+                DB.registerUpload(archivo, err, false, '')
+            }
+
             }).then((res) => {
-                Logger.log(true, `${archivo} Uploaded`)
-
-                message_id = res.message_id
-
-                return DB.registerUpload(archivo, '', true, res.file_id)
             }).then(() => {
                 return downloadImage(imagen, episodePath, folder)
             }).then((imagePath) =>{
@@ -205,8 +213,7 @@ const sendFeedToTelegram = async (feed, channel) => {
             }).then(() => {
                 callback()
             }).catch((err) => {
-                Logger.log(false, `${archivo} Failed to upload. ${err}`)
-                DB.registerUpload(archivo, err, false, '')
+
                 .then(err => {
                     callback(err)
                 }).catch(err => {
@@ -312,7 +319,7 @@ const downloadImage = async (imageUrl, imagePath, folder) => {
             response.data.pipe(stream);
     
             stream.on('finish', resolve(imagePath));
-            stream.on('error', reject('downloadImage', `Unable to download cover image\nImage url: ${imageUrl}`));
+            stream.on('error', reject('downloadImage', `Unable to download cover image. Image url: ${imageUrl}`));
         }
     })
 }
@@ -325,59 +332,51 @@ const downloadImage = async (imageUrl, imagePath, folder) => {
  * @param {String} episodePath -The episode's path
  */
 const editMetadata = async (artist, title, comment, episodePath) => {
-    return new Promise((resolve, reject) => {
-        let tags = {
-            artist,
-            title,
-            comment,
-            APIC: COVER
-        }
+    const tags = {
+        artist,
+        title,
+        comment,
+        APIC: COVER,
+        // image: {
+        //     mime: 'png/jpeg',
+        //     type: {
+        //       id: 3,
+        //       name: 'front cover'
+        //     },
+        //     description: 'Caratula Frontal',
+        //     imageBuffer: (file buffer)
+        // },
+    }
 
-        NodeID3.write(tags, episodePath, (err, buffer) => {
-            if (!err) resolve(episodePath);
-            else reject([`${artist} - ${title} editMetadata`, err]);
-        })
-    })
+    return NodeID3.write(tags, episodePath);
 }
 
-const sendEpisodeToChannel = async (episodePath, caption, chat_id, performer, title) => {
-    return new Promise ((resolve, reject) => {
-        const payload = {
-            audio: fs.createReadStream(episodePath),
-            disable_notification: 'true',
-            parse_mode: 'html',
-            caption,
-            chat_id: ENV === 'prod' ? chat_id : process.env.TEST_CHANNEL,
-            performer,
-            title
-        }
+/**
+ * Posts the actual audio file to Telegram
+ * @param {String} episodePath The path to the downloaded episode file
+ * @param {String} caption The Message attached to the audio file
+ * @param {String} chat_id Telegram's chat id '@something'
+ * @param {String} performer Name of the Channel
+ * @param {String} title Title of the episode
+ */
+const sendEpisodeToChannel = (episodePath, caption, chat_id, performer, title) => {
+    const connectcionUrl = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio`;
+    const destination = ENV === 'test' ? TEST_CHANNEL : chat_id;
 
-        let connectcionUrl = `https://api.telegram.org/bot${env.BOT_TOKEN}/sendAudio`
+    const form = new FormData();
+    const stream = fs.createReadStream(episodePath);
 
-        try {
-            const response = await axios.post({
-                url: connectcionUrl,
-                data: payload
-            })
+    form.append('audio', stream);
+    form.append('disable_notification', 'true');
+    form.append('parse_mode', 'html');
+    form.append('caption', caption);
+    form.append('chat_id', destination);
+    form.append('performer', performer);
+    form.append('title', title);
 
-            fs.unlink(episodePath, err => {
-                if (err) log([`${performer} - ${title} sendEpisodeToChannel`, err]);
-                else return { file_id: response.result.audio.file_id, message_id: response.result.message_id };
-            })
-        } catch(err) {
-            fs.unlinkSync(episodePath);
-            reject([`${performer} - ${title} sendEpisodeToChannel`, err.message]);
-        }
-        requestP.post({
-            url: connectcionUrl,
-            formData: payload,
-            json: true
-        }).then((res) => {
-        }).catch(err => {
-            fs.unlinkSync(episodePath);
-            reject([`${performer} - ${title} sendEpisodeToChannel`, err.message]);
-        })
-    })
+    const formHeaders = form.getHeaders();
+
+    return axios.post(connectcionUrl, form, { headers: {...formHeaders}})
 }
 
 const cleanDownloads = () => {
