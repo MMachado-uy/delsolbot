@@ -1,10 +1,11 @@
-ALTER TABLE sources
-    ADD COLUMN nombre VARCHAR(80);
+ALTER TABLE `sources`
+    ADD COLUMN `nombre` VARCHAR(80);
 
+ALTER TABLE `podcasts`
+    ADD COLUMN `file_id` VARCHAR(50);
 
-ALTER TABLE podcasts
-    ADD COLUMN file_id VARCHAR(50)
-    MODIFY COLUMN obs TEXT;
+ALTER TABLE `podcasts` 
+    CHANGE COLUMN `obs` `obs` VARCHAR(255) NULL DEFAULT NULL ;
 
 UPDATE `sources` SET nombre='No Toquen Nada' WHERE channel='@NoToquenNadaTelegram';
 UPDATE `sources` SET nombre='Darwin Desbocatti' WHERE channel='@DarwinDesbocattiTelegram';
