@@ -1,6 +1,6 @@
 ALTER TABLE `podcasts` 
     ADD COLUMN `destino` INT NOT NULL AFTER `file_id`,
-    ADD INDEX `fk_podcasts_1_idx` (`destino` ASC) VISIBLE;
+    ADD INDEX `fk_podcasts_1_idx` (`destino` ASC);
 ;
 ALTER TABLE `podcasts` 
     ADD CONSTRAINT `fk_podcasts_1`
