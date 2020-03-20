@@ -1,5 +1,5 @@
 const axios = require('axios');
-const FormData = require('form-data');
+const requestP = require('request-promise-native');
 const fs = require('fs');
 const path = './coso.mp3';
 
@@ -15,28 +15,45 @@ const getFile = async () => {
 }
 
 const sendFile = () => {
-    return new Promise((resolve, reject) => {
         const connectcionUrl = 'https://api.telegram.org/bot309354292:AAFszR4i7um_3tsVk8Ea9FkHa1HqoGx-QU4/sendAudio';
 
-        const form = new FormData();
         const stream = fs.createReadStream(path);
 
-        form.append('audio', stream);
-        form.append('disable_notification', 'true');
-        form.append('parse_mode', 'html');
-        form.append('caption', 'Mensaje de prueba');
-        form.append('chat_id', '@pHJWbiFfZ1iY');
-        form.append('performer', 'Mauricio');
-        form.append('title', 'Audio de Prueba');
+        const payload = {
+            audio: stream,
+            disable_notification: 'true',
+            parse_mode: 'html',
+            caption: 'Mensaje de prueba',
+            chat_id: '@pHJWbiFfZ1iY',
+            performer: 'Mauricio',
+            title: 'Audio de Prueba'
+        }
 
-        const formHeaders = form.getHeaders();
+        // const formHeaders = form.getHeaders();
 
-        axios.post(connectcionUrl, form, { headers: {...formHeaders}})
-        .then(result => {
-          resolve(result);
-          console.log(result.data);
-        }).catch(err => reject(err));
-    })
+        return requestP.post({
+            url: connectcionUrl,
+            formData: payload,
+            json: true
+        })
+        // .then((res) => {
+        //     fs.unlink(episodePath, err => {
+        //         if (err) {
+        //             reject([`${performer} - ${title} sendEpisodeToChannel`, err])
+        //         } else {
+        //             resolve({ file_id: res.result.audio.file_id, message_id: res.result.message_id })
+        //         }
+        //     })
+        // }).catch(err => {
+        //     fs.unlinkSync(episodePath)
+        //     reject([`${performer} - ${title} sendEpisodeToChannel`, err.message])
+        // })
+
+        // axios.post(connectcionUrl, form, { headers: {...formHeaders}})
+        // .then(result => {
+        //   resolve(result);
+        //   console.log(result.data);
+        // }).catch(err => reject(err));
 }
 
 const main = async () => {

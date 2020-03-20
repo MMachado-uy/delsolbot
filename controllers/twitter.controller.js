@@ -1,14 +1,16 @@
-const Twitter = require('twitter')
-var fs = require('fs')
+const env = require('dotenv').config().parsed;
+
+const Twitter = require('twitter');
+var fs = require('fs');
 
 module.exports = class TwController {
 
-    constructor(key, secret, token_key, token_secret) {
+    constructor() {
         this.TwCli = new Twitter({
-            consumer_key: key,
-            consumer_secret: secret,
-            access_token_key: token_key,
-            access_token_secret: token_secret
+            consumer_key: process.env.TWITTER_CONSUMER_KEY,
+            consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
+            access_token_key: process.env.TWITTER_ACCESS_TOKEN_KEY,
+            access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRETt
         })
     }
 
@@ -27,7 +29,7 @@ module.exports = class TwController {
                 return this.tweet(res, message_id, titulo, canal)
             })
             .then(res => {
-                resolve()
+                resolve(res)
             })
             .catch(err => {
                 reject(err)

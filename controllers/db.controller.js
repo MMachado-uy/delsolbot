@@ -42,30 +42,38 @@ module.exports = class Db {
      * @param {string} obs - A comment
      * @param {boolean} exito - The status of the upload
      * @param {string} fileId - The id returned by Telegram
+     * @param {string} channel - The channel this audio was uploaded to
      * @returns {Promise} The rows affected by the insert, or error message
      */
-    registerUpload(archivo, obs = '', exito, fileId = '') {
-        return new Promise((resolve, reject) => {
+    registerUpload(archivo, obs = '', exito, fileId = '', channel = '') {
+        return new Promise(async (resolve, reject) => {
+            try {
 
-            exito = (exito ? 1 : 0);
-            obs = parseResponse(obs);
-
-            const con  = await this.getConnection();
-            con.query({
-                sql: 'INSERT INTO `podcasts` (archivo, obs, pudo_subir, file_id) VALUES (?, ?, ?, ?)',
-                timeout: 40000,
-                values: [archivo,  obs, exito, fileId]
-            }, (err, results) => {
-                this.closeConnection(con);
-
-                if (err) {
-                    reject([`${archivo} registerUpload`, err]);
-                } else {
-                    resolve(results);
+                exito = (exito ? 1 : 0);
+                obs = parseResponse(obs);
+                let channelId = null;
+                
+                if (channel !== '') {
+                    channelId = await this.getChannelId(channel);
                 }
-            })
-        }).catch(err => {
-            reject([`${archivo} getConnection`, err]);
+                    
+                const con  = await this.getConnection();
+                con.query({
+                    sql: 'INSERT INTO `podcasts` (archivo, obs, pudo_subir, file_id, destino) VALUES (?, ?, ?, ?, ?)',
+                    timeout: 40000,
+                    values: [archivo,  obs, exito, fileId, channelId]
+                }, (err, results) => {
+                    this.closeConnection(con);
+                    
+                    if (err) {
+                        reject([`${archivo} registerUpload`, err]);
+                    } else {
+                        resolve(results);
+                    }
+                })
+            } catch (error) {
+                reject(error)
+            }
         })
     }
 
@@ -74,7 +82,7 @@ module.exports = class Db {
      * @returns {Promise} The list of RSS sources url's, or error message
      */
     getRssList() {
-        return new Promise((resolve, reject) => {
+        return new Promise(async (resolve, reject) => {
             const con = await this.getConnection();
             con.query({
                 sql: 'SELECT url, channel FROM `sources`',
@@ -97,7 +105,7 @@ module.exports = class Db {
      * @returns {Promise} The row representation of the status of the given podcast, or error message
      */
     getPodcastByName(name) {
-        return new Promise((resolve, reject) => {
+        return new Promise(async (resolve, reject) => {
             const con = await this.getConnection();
             con.query({
                 sql: 'SELECT * FROM `podcasts` WHERE `archivo` = ?',
@@ -120,7 +128,7 @@ module.exports = class Db {
      * @returns {Promise} The list of the uploads rejected by Telegram, or error message
      */
     getFailedPodcasts() {
-        return new Promise((resolve, reject) => {
+        return new Promise(async (resolve, reject) => {
             const con = await this.getConnection();
             con.query({
                 sql: 'SELECT * FROM `podcasts` WHERE `pudo_subir` = 0',
@@ -142,7 +150,7 @@ module.exports = class Db {
      * @returns {Promise} The stored podcasts, or error message
      */
     getStoredPodcasts() {
-        return new Promise((resolve, reject) => {
+        return new Promise(async (resolve, reject) => {
             const con = await this.getConnection();
             con.query({
                 sql: 'SELECT id, archivo FROM `podcasts`',
@@ -154,6 +162,26 @@ module.exports = class Db {
                     reject(['getStoredPodcasts', err]);
                 } else {
                     resolve(results);
+                }
+            })
+        })
+    }
+
+    getChannelId(channel) {
+        return new Promise(async (resolve, reject) => {
+            const con = await this.getConnection();
+            
+            con.query({
+                sql: 'SELECT id FROM sources WHERE channel = ?',
+                timeout: 40000,
+                values: [channel]
+            }, (err, results) => {
+                this.closeConnection(con);
+                
+                if (err) {
+                    reject(['getChannelId', err]);
+                } else {
+                    resolve(results[0].id);
                 }
             })
         })
