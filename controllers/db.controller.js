@@ -4,6 +4,7 @@ const {
 } = require('../utils');
 
 module.exports = class Db {
+
     /**
      * Get a new database connection
      * @returns {Promise} A new database connection, or error message
@@ -48,8 +49,6 @@ module.exports = class Db {
     registerUpload(archivo, obs = '', exito, fileId = '', channel = '') {
         return new Promise(async (resolve, reject) => {
             try {
-
-                exito = (exito ? 1 : 0);
                 obs = parseResponse(obs);
                 let channelId = null;
                 
@@ -61,7 +60,13 @@ module.exports = class Db {
                 con.query({
                     sql: 'INSERT INTO `podcasts` (archivo, obs, pudo_subir, file_id, destino) VALUES (?, ?, ?, ?, ?)',
                     timeout: 40000,
-                    values: [archivo,  obs, exito, fileId, channelId]
+                    values: [
+                        archivo, 
+                        obs, 
+                        exito ? 1 : 0, 
+                        fileId, 
+                        channelId
+                    ]
                 }, (err, results) => {
                     this.closeConnection(con);
                     
@@ -85,7 +90,7 @@ module.exports = class Db {
         return new Promise(async (resolve, reject) => {
             const con = await this.getConnection();
             con.query({
-                sql: 'SELECT url, channel FROM `sources`',
+                sql: 'SELECT url, channel, nombre FROM `sources`',
                 timeout: 40000
             }, (err, results) => {
                 this.closeConnection(con);
@@ -100,17 +105,17 @@ module.exports = class Db {
     }
 
     /**
-     * Get a single podcast upload status
-     * @param {string} name - The filename of the podcast to search
+     * Get a single podcast episode
+     * @param {string} id - The filename of the podcast to search
      * @returns {Promise} The row representation of the status of the given podcast, or error message
      */
-    getPodcastByName(name) {
+    getPodcastById(id) {
         return new Promise(async (resolve, reject) => {
             const con = await this.getConnection();
             con.query({
-                sql: 'SELECT * FROM `podcasts` WHERE `archivo` = ?',
+                sql: 'SELECT p.id, p.archivo, p.obs, p.pudo_subir, p.fecha_procesado, p.file_id, s.channel FROM `podcasts` AS p, `sources` AS s WHERE p.archivo = ? AND s.id = p.destino',
                 timeout: 40000,
-                values: [name]
+                values: [id]
             }, (err, results) => {
                 this.closeConnection(con);
 

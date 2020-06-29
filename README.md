@@ -13,7 +13,7 @@ How not to miss your radio shows using Telegram's integrated media player.
 ## Que es esto? / What is this?
 
 [ES]
-Este script corre un cron job, que en cada ejecucion, busca en las fuentes RSS detalladas en la base de datos, busca episodios nuevos y los publica en un canal de Telegram por cada fuente RSS, luego de agregar la metadata correspondiente a cada episodio. Una vez terminado, publica un Tweet con los detalles de lo publicado y un link al audio en Telegram.
+Este script corre un cron job, que en cada ejecución, busca en las fuentes RSS detalladas en la base de datos, busca episodios nuevos y los publica en un canal de Telegram por cada fuente RSS, luego de agregar la metadata correspondiente a cada episodio. Una vez terminado, publica un Tweet con los detalles de lo publicado y un link al audio en Telegram.
 
 [EN]
 This script runs a cronjob that looks for new episodes in the RSS sources detailed in a database, and then publishes them in a Telegram Channel per RSS source, but only after it edits each audio file's metadata. After it's done, publishes a Tweet with details of the episode and a link to the audio in Telegram.
