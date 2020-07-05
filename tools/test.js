@@ -1,3 +1,6 @@
+/* eslint-disable */
+require('dotenv').config()
+
 const axios = require('axios');
 const requestP = require('request-promise-native');
 const fs = require('fs');
@@ -24,8 +27,8 @@ const sendFile = () => {
             disable_notification: 'true',
             parse_mode: 'html',
             caption: 'Mensaje de prueba',
-            chat_id: '@pHJWbiFfZ1iY',
-            performer: 'Mauricio',
+            chat_id: process.env.TEST_CHANNEL,
+            performer: 'Some_Performer',
             title: 'Audio de Prueba'
         }
 

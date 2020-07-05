@@ -3,13 +3,21 @@ require('dotenv').config()
 const requestP = require('request-promise-native');
 const CronJob = require('cron').CronJob;
 const concat = require('concat-stream');
-const axios = require('axios').default;
 const Parser = require('rss-parser');
 const NodeID3 = require('node-id3');
-const Path = require('path');
 const fs = require('fs');
 
-const { cleanDownloads, debug, log, logError, getIdFromItem, sanitizeContent, sanitizeEpisode } = require('./lib/helpers');
+const {
+    cleanDownloads, 
+    debug, 
+    log, 
+    logError, 
+    getIdFromItem, 
+    getMedia, 
+    sanitizeContent, 
+    sanitizeEpisode 
+} = require('./lib/helpers');
+
 const TwController = require('./controllers/twitter.controller');
 const DbController = require('./controllers/db.controller');
 
@@ -64,29 +72,32 @@ const getFeed = async rssUri => await parser.parseURL(rssUri);
 const processFeed = async feed => {
     const { title } = feed;
 
-    feed.items.forEach(async item => {
-        const itemId = getIdFromItem(item);
+    for await (const item of feed.items) {
+        await processItem(item, title);
+    }
+}
 
-        try {
-            const stored = await DB.getPodcastById(itemId);
-    
-            if (stored.length > 1) logError(`Review logs for id ${stored[0].archivo}: Too many entries in DB`);
-            else {
-                const isForward = stored.length === 1 && stored.pudo_subir && stored.channel !== item.channel;
-                
-                if (isForward) item.set('forwardFile', stored.file_id);
-    
-                if (isForward || stored.length === 0) {
-                    const telegramMessage = await sendToTelegram(item, title);
-                    const { message_id, imagePath } = telegramMessage;
+const processItem = async (item, title) => {
+    const itemId = getIdFromItem(item);
+    debug(`Processing item: ${itemId}`);
 
-                    if (ENV === 'prod') await sendToTwitter(message_id, imagePath, title, item.channel);
-                }
-            }
-        } catch (error) {
-            logError(`Error processing item ${itemId}:`, error);
+    try {
+        const stored = await DB.getPodcastById(itemId);
+        const isForward = stored.pudo_subir && stored[0].channel !== item.channel;
+        
+        if (isForward) item.set('forwardFile', stored.file_id);
+
+        if (isForward || stored.length === 0) {
+            const telegramMessage = await sendToTelegram(item, title);
+            const { message_id, imagePath } = telegramMessage;
+
+            if (ENV === 'prod') await sendToTwitter(message_id, imagePath, title, item.channel);
         }
-    })
+    } catch (error) {
+        logError(`Error processing item ${itemId}:`, error);
+    } finally {
+        log(`Done processing item: ${itemId}`);
+    }
 }
 
 /**
@@ -95,29 +106,38 @@ const processFeed = async feed => {
  * @returns telegramMessage - see: https://core.telegram.org/bots/api#message
  */
 const sendToTelegram = async (feedItem, channelName) => {
-    const { title, desc, link: url, imagen } = feedItem;
+    const { title, content, link: url } = feedItem;
+    const { image } = feedItem.itunes;
     const archivo = getIdFromItem(feedItem);
-    const content = `<b>${title}</b>\n${desc}`;
+    const caption = `<b>${title}</b>\n${content}`;
     const folderName = sanitizeContent(channelName);
     const episodePath = `${DDIR}${folderName}/${sanitizeEpisode(title)}.mp3`;
     const { channel } = feedItem;
     
     try {
-        await downloadEpisode(url, episodePath, folderName);
-        const imagePath = await downloadImage(imagen, folderName);
+        const forward = !feedItem.forwardFile ? null : feedItem.forwardFile;
+        const imagePath = await downloadImage(image, folderName);
+
+        if (!forward) {
+            await downloadEpisode(url, episodePath, folderName);
+            await editMetadata(channelName, title, caption, episodePath, imagePath, archivo);
+        }
+
+        const telegramResponse = await sendEpisodeToChannel(episodePath, caption, channel, channelName, title, archivo, forward);
         
-        await editMetadata(channelName, title, content, episodePath, imagePath, archivo);
-        const telegramResponse = await sendEpisodeToChannel(episodePath, content, channel, channelName, title, archivo);
-        
-        debug(`${archivo} Uploaded!`);
+        debug(telegramResponse)
+        debug(`${archivo} Uploaded`);
 
-        const { message_id } = telegramResponse;
+        const { message_id } = telegramResponse.result;
+        const { file_id } = telegramResponse.result.audio;
 
-        await DB.registerUpload(archivo, '', true, message_id, channel);
+        await DB.registerUpload(archivo, '', true, file_id, channel);
 
+        debug('Sending to Twitter...');
         if (ENV === 'prod') await sendToTwitter(message_id, imagePath, title, channel);
+        debug('Sent!');
 
-        return {...telegramResponse, imagePath};
+        return {...telegramResponse.result, imagePath};
     } catch(err) {
         logError(`${archivo} Failed to upload. ${err.message}`);
         DB.registerUpload(archivo, err.message, false, '', channel);
@@ -140,20 +160,7 @@ const sendToTwitter = async (message_id, imagePath, title, channel) => {
 const downloadEpisode = async (episodeUrl, episodePath, folder) => {
     if (!fs.existsSync(`${DDIR}${folder}`)) fs.mkdirSync(`${DDIR}${folder}`);
     
-    const path = Path.resolve(episodePath);
-    const stream = fs.createWriteStream(path);
-
-    const response = await axios(episodeUrl, {
-        method: 'GET',
-        responseType: 'stream'
-      })
-    
-      response.data.pipe(stream)
-    
-    return new Promise((resolve, reject) => {
-        stream.on('finish', resolve)
-        stream.on('error', reject)
-    })
+    return await getMedia(episodeUrl, episodePath);
 }
 
 /**
@@ -163,28 +170,16 @@ const downloadEpisode = async (episodeUrl, episodePath, folder) => {
  * @returns {Promise} La ruta local de la imagen
  */
 const downloadImage = async (imageUrl, folder) => {
-    if (!imageUrl) return COVER;
+    if (typeof imageUrl !== 'string') return COVER;
 
     const downloadFolder = `${DDIR}${folder}`;
 
     if (!fs.existsSync(downloadFolder)) fs.mkdirSync(downloadFolder);
 
     const imgName = imageUrl.split('/').pop();
-    const path = Path.resolve(`${downloadFolder}/${imgName}`);
-    const stream = fs.createWriteStream(path);
+    const path = `${downloadFolder}/${imgName}`;
 
-    const response = await axios(imageUrl, {
-        method: 'GET',
-        responseType: 'stream'
-    })
-    
-    response.data.pipe(stream)
-    
-    return new Promise((resolve, reject) => {
-        stream.on('finish', resolve)
-        stream.on('error', reject)
-    })
-
+    return await getMedia(imageUrl, path);
 }
 
 /**
@@ -239,9 +234,11 @@ const editMetadata = (artist, title, comment, episodePath, imagePath = COVER, tr
  * @param {String} chat_id Telegram's chat id '@something'
  * @param {String} performer Name of the Channel
  * @param {String} title Title of the episode
+ * @param {String} id Id of the episode
+ * @param {String} file_id Previously uploaded file. If forwarded.
  * @param {String|Integer} id The Id of the Episode
  */
-const sendEpisodeToChannel = (episodePath, caption, chat_id, performer, title, id) => {
+const sendEpisodeToChannel = async (episodePath, caption, chat_id, performer, title, id, file_id = null) => {
     debug(`Sending: ${id}`);
 
     const connectcionUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendAudio`;
@@ -250,7 +247,7 @@ const sendEpisodeToChannel = (episodePath, caption, chat_id, performer, title, i
     const stream = fs.createReadStream(episodePath);
 
     const payload = {
-        audio: stream,
+        audio: file_id === null ? stream : file_id,
         disable_notification: 'true',
         parse_mode: 'html',
         caption: caption,
@@ -259,11 +256,11 @@ const sendEpisodeToChannel = (episodePath, caption, chat_id, performer, title, i
         title: title
     }
 
-    return requestP.post({
+    return await requestP.post({
         url: connectcionUrl,
         formData: payload,
         json: true
-    })
+    });
 }
 
 if (ENV === 'local') {

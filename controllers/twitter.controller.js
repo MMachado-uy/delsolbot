@@ -1,7 +1,7 @@
-const env = require('dotenv').config().parsed;
+require('dotenv').config()
 
 const Twitter = require('twitter');
-var fs = require('fs');
+const fs = require('fs');
 
 module.exports = class TwController {
 
@@ -10,7 +10,7 @@ module.exports = class TwController {
             consumer_key: process.env.TWITTER_CONSUMER_KEY,
             consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
             access_token_key: process.env.TWITTER_ACCESS_TOKEN_KEY,
-            access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRETt
+            access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET
         })
     }
 
@@ -63,24 +63,22 @@ module.exports = class TwController {
      * @param {String} canal - Nombre del canal asociado al episodio
      */
     tweet(imagen, message_id, titulo, canal) {
-        canal = canal.substr(1, canal.length)
-        let url = `https://t.me/${canal}/${message_id}`
+        let url = `https://t.me/${canal.substr(1, canal.length)}/${message_id}`
         let cuerpo = `\n¿Te lo perdiste? Está en Telegram: `
         let hashtags = `\n#DelSolEnTelegram #DelSol`
         let status = `${titulo}${cuerpo}${url}${hashtags}`
 
         if (status.length > 280) {
-            if (titulo.length + url.length + hashtags.length < 278) { // 280 - '\n'.length
-                status = `${titulo}\n${url}${hashtags}`
+            // 280 - '\n'.length
+            if (titulo.length + url.length + hashtags.length < 278) { 
+                status = `${titulo}\n${url}${hashtags}`;
             } else {
-                let n = titulo.length + url.length + hashtags.length + 2 // Largo del mensaje
-                n = n - 280 // Sobrante del maximo
-                n = titulo.length - n - 3
+                 // Largo del mensaje
+                let n = titulo.length + url.length + hashtags.length + 2;
+                n -= 280;
+                n = titulo.length - n - 3;
 
-                titulo = titulo.substr(0, n)
-                titulo += '...'
-
-                status = `${titulo}\n${url}${hashtags}`
+                status = `${titulo.substr(0, n)}...\n${url}${hashtags}`;
             }
         }
 
@@ -88,6 +86,7 @@ module.exports = class TwController {
             status,
             media_ids: imagen.media_id_string
         }
+
         return this.TwCli.post('statuses/update', payload)
     }
 }

@@ -1,29 +1,44 @@
+require('dotenv').config()
+
 const mysql = require('mysql')
 const {
     parseResponse
 } = require('../utils');
 
 module.exports = class Db {
+    constructor() {
+        this.host = process.env.DB_HOST;
+        this.port = process.env.DB_PORT;
+        this.user = process.env.DB_USER;
+        this.password = process.env.DB_PASS;
+        this.database = process.env.DB;
+        this.con = null;
+    }
 
     /**
      * Get a new database connection
      * @returns {Promise} A new database connection, or error message
      */
-    async getConnection() {
+    async openConnection() {
         return new Promise((resolve, reject) => {
-            var con = mysql.createConnection({
-                host     : process.env.DB_HOST,
-                port     : process.env.DB_PORT,
-                user     : process.env.DB_USER,
-                password : process.env.DB_PASS,
-                database : process.env.DB
+            const con = mysql.createConnection({
+                host: this.host,
+                port: this.port,
+                user: this.user,
+                password: this.password,
+                database: this.database
             })
 
             con.connect(err => {
                 if (err) {
-                    reject(['getConnection', err])
+                    reject([
+                        'openConnection', 
+                        err
+                    ])
                 } else {
-                    resolve(con)
+                    this.con = con;
+
+                    resolve(con);
                 }
             })
         })
@@ -33,8 +48,9 @@ module.exports = class Db {
      * Closes/destroys a database connection
      * @param {Object} con - A database connection to close/destroy
      */
-    closeConnection(con) {
-        con.destroy();
+    closeConnection() {
+        this.con.destroy();
+        this.con = null;
     }
 
     /**
@@ -46,32 +62,32 @@ module.exports = class Db {
      * @param {string} channel - The channel this audio was uploaded to
      * @returns {Promise} The rows affected by the insert, or error message
      */
-    registerUpload(archivo, obs = '', exito, fileId = '', channel = '') {
-        return new Promise(async (resolve, reject) => {
+    async registerUpload(archivo, obs = '', exito, fileId = '', channel = '') {
+        let channelId = null;
+        if (channel !== '') channelId = await this.getChannelId(channel);
+
+        await this.openConnection();
+
+        return new Promise((resolve, reject) => {
             try {
-                obs = parseResponse(obs);
-                let channelId = null;
-                
-                if (channel !== '') {
-                    channelId = await this.getChannelId(channel);
-                }
-                    
-                const con  = await this.getConnection();
-                con.query({
+                this.con.query({
                     sql: 'INSERT INTO `podcasts` (archivo, obs, pudo_subir, file_id, destino) VALUES (?, ?, ?, ?, ?)',
                     timeout: 40000,
                     values: [
                         archivo, 
-                        obs, 
+                        parseResponse(obs), 
                         exito ? 1 : 0, 
                         fileId, 
                         channelId
                     ]
                 }, (err, results) => {
-                    this.closeConnection(con);
+                    this.closeConnection();
                     
                     if (err) {
-                        reject([`${archivo} registerUpload`, err]);
+                        reject([
+                            `${archivo} registerUpload`,
+                            err
+                        ]);
                     } else {
                         resolve(results);
                     }
@@ -86,17 +102,21 @@ module.exports = class Db {
      * Get the RSS sources list
      * @returns {Promise} The list of RSS sources url's, or error message
      */
-    getRssList() {
-        return new Promise(async (resolve, reject) => {
-            const con = await this.getConnection();
-            con.query({
+    async getRssList() {
+        await this.openConnection();
+        
+        return new Promise((resolve, reject) => {
+            this.con.query({
                 sql: 'SELECT url, channel, nombre FROM `sources`',
                 timeout: 40000
             }, (err, results) => {
-                this.closeConnection(con);
+                this.closeConnection();
 
                 if (err) {
-                    reject(['getRssList', err]);
+                    reject([
+                        'getRssList',
+                        err
+                    ]);
                 } else {
                     resolve(results);
                 }
@@ -109,18 +129,22 @@ module.exports = class Db {
      * @param {string} id - The filename of the podcast to search
      * @returns {Promise} The row representation of the status of the given podcast, or error message
      */
-    getPodcastById(id) {
-        return new Promise(async (resolve, reject) => {
-            const con = await this.getConnection();
-            con.query({
+    async getPodcastById(id) {
+        await this.openConnection();
+        
+        return new Promise((resolve, reject) => {
+            this.con.query({
                 sql: 'SELECT p.id, p.archivo, p.obs, p.pudo_subir, p.fecha_procesado, p.file_id, s.channel FROM `podcasts` AS p, `sources` AS s WHERE p.archivo = ? AND s.id = p.destino',
                 timeout: 40000,
                 values: [id]
             }, (err, results) => {
-                this.closeConnection(con);
+                this.closeConnection();
 
                 if (err) {
-                    reject(['getPodcastByName', err]);
+                    reject([
+                        'getPodcastByName',
+                        err
+                    ]);
                 } else {
                     resolve(results);
                 }
@@ -132,17 +156,21 @@ module.exports = class Db {
      * Get the list of the failed uploads
      * @returns {Promise} The list of the uploads rejected by Telegram, or error message
      */
-    getFailedPodcasts() {
-        return new Promise(async (resolve, reject) => {
-            const con = await this.getConnection();
-            con.query({
+    async getFailedPodcasts() {
+        await this.openConnection();
+        
+        return new Promise((resolve, reject) => {
+            this.con.query({
                 sql: 'SELECT * FROM `podcasts` WHERE `pudo_subir` = 0',
                 timeout: 40000
             }, (err, results) => {
-                this.closeConnection(con);
+                this.closeConnection();
 
                 if (err) {
-                    reject(['getFailedPodcasts', err]);
+                    reject([
+                        'getFailedPodcasts',
+                        err
+                    ]);
                 } else {
                     resolve(results);
                 }
@@ -154,17 +182,21 @@ module.exports = class Db {
      * Get the identifiers for the podcasts
      * @returns {Promise} The stored podcasts, or error message
      */
-    getStoredPodcasts() {
-        return new Promise(async (resolve, reject) => {
-            const con = await this.getConnection();
-            con.query({
+    async getStoredPodcasts() {
+        await this.openConnection();
+        
+        return new Promise((resolve, reject) => {
+            this.con.query({
                 sql: 'SELECT id, archivo FROM `podcasts`',
-                timeout: 40000,
+                timeout: 40000
             }, (err, results) => {
-                this.closeConnection(con);
+                this.closeConnection();
 
                 if (err) {
-                    reject(['getStoredPodcasts', err]);
+                    reject([
+                        'getStoredPodcasts',
+                        err
+                    ]);
                 } else {
                     resolve(results);
                 }
@@ -172,19 +204,22 @@ module.exports = class Db {
         })
     }
 
-    getChannelId(channel) {
-        return new Promise(async (resolve, reject) => {
-            const con = await this.getConnection();
-            
-            con.query({
+    async getChannelId(channel) {
+        await this.openConnection();
+        
+        return new Promise((resolve, reject) => {
+            this.con.query({
                 sql: 'SELECT id FROM sources WHERE channel = ?',
                 timeout: 40000,
                 values: [channel]
             }, (err, results) => {
-                this.closeConnection(con);
+                this.closeConnection();
                 
                 if (err) {
-                    reject(['getChannelId', err]);
+                    reject([
+                        'getChannelId',
+                        err
+                    ]);
                 } else {
                     resolve(results[0].id);
                 }
