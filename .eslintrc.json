@@ -248,7 +248,7 @@
         "quote-props": "off",
         "quotes": "off",
         "radix": "error",
-        "require-atomic-updates": "error",
+        // "require-atomic-updates": "error", // False positives suck
         "require-await": "off",
         "require-jsdoc": "error",
         "require-unicode-regexp": "error",
