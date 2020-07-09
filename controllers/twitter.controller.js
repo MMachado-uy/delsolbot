@@ -43,7 +43,6 @@ module.exports = class TwController {
      * @returns {Promise} - La respuesta a la subida de imagenes
      */
     subirMedia(filePath = 'cover.jpg') {
-
         let media = fs.readFileSync(filePath);
         let media_data = fs.readFileSync(filePath, {encoding: 'base64'});
 
@@ -63,9 +62,9 @@ module.exports = class TwController {
      * @param {String} canal - Nombre del canal asociado al episodio
      */
     tweet(imagen, message_id, titulo, canal) {
-        let url = `https://t.me/${canal.substr(1, canal.length)}/${message_id}`
-        let cuerpo = `\n¿Te lo perdiste? Está en Telegram: `
-        let hashtags = `\n#DelSolEnTelegram #DelSol`
+        const url = `https://t.me/${canal.substr(1, canal.length)}/${message_id}`
+        const cuerpo = `\n¿Te lo perdiste? Está en Telegram: `
+        const hashtags = `\n#DelSolEnTelegram #DelSol`
         let status = `${titulo}${cuerpo}${url}${hashtags}`
 
         if (status.length > 280) {

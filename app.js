@@ -47,11 +47,15 @@ async function main() {
         
         for await (const rssSource of rssList) {
             log(`Starting to process ${rssSource.channel}`);
-    
+
             let feed = await getFeed(rssSource.url);
             feed.items.map(item => item.channel = rssSource.channel);
 
-            await processFeed(feed);
+            const { title } = feed;
+
+            for await (const item of feed.items) {
+                await processItem(item, title);
+            }
         }
     } catch (error) {
         logError(`Error in main process: ${error}`)
@@ -65,33 +69,27 @@ async function main() {
  */
 const getFeed = async rssUri => await parser.parseURL(rssUri);
 
-/**
- * Toma un feed de un canal especifico y lo envia a Telegram y Twitter
- * @param {Object} feed - Los episodios para el canal actual, con la metadata filtrada
- */
-const processFeed = async feed => {
-    const { title } = feed;
-
-    for await (const item of feed.items) {
-        await processItem(item, title);
-    }
-}
-
 const processItem = async (item, title) => {
     const itemId = getIdFromItem(item);
     debug(`Processing item: ${itemId}`);
 
     try {
         const stored = await DB.getPodcastById(itemId);
-        const isForward = stored.pudo_subir && stored[0].channel !== item.channel;
+
+        const isForward = stored && 
+                          stored.length && 
+                          stored[0].pudo_subir && 
+                          !stored.some(record => record.channel === item.channel);
         
-        if (isForward) item.set('forwardFile', stored.file_id);
+        if (isForward) item.forwardFile = stored[0].file_id;
 
         if (isForward || stored.length === 0) {
             const telegramMessage = await sendToTelegram(item, title);
             const { message_id, imagePath } = telegramMessage;
-
-            if (ENV === 'prod') await sendToTwitter(message_id, imagePath, title, item.channel);
+            
+            debug('Sending to Twitter...');
+            if (ENV === 'prod') await sendToTwitter(message_id, imagePath, item.title, item.channel);
+            debug('Sent!');
         }
     } catch (error) {
         logError(`Error processing item ${itemId}:`, error);
@@ -115,7 +113,7 @@ const sendToTelegram = async (feedItem, channelName) => {
     const { channel } = feedItem;
     
     try {
-        const forward = !feedItem.forwardFile ? null : feedItem.forwardFile;
+        const forward = feedItem.forwardFile ? feedItem.forwardFile : null;
         const imagePath = await downloadImage(image, folderName);
 
         if (!forward) {
@@ -128,14 +126,8 @@ const sendToTelegram = async (feedItem, channelName) => {
         debug(telegramResponse)
         debug(`${archivo} Uploaded`);
 
-        const { message_id } = telegramResponse.result;
         const { file_id } = telegramResponse.result.audio;
-
         await DB.registerUpload(archivo, '', true, file_id, channel);
-
-        debug('Sending to Twitter...');
-        if (ENV === 'prod') await sendToTwitter(message_id, imagePath, title, channel);
-        debug('Sent!');
 
         return {...telegramResponse.result, imagePath};
     } catch(err) {
@@ -185,7 +177,7 @@ const downloadImage = async (imageUrl, folder) => {
 /**
  * Writes an episode's idv3 metadata to create content-coherent data
  * @param {String} artist - Show's name, mapped to the 'artist' field
- * @param {String} title - Episode's naem, mapped to the 'title' field
+ * @param {String} title - Episode's name, mapped to the 'title' field
  * @param {String} comment - Episode's description, mapped to the 'comment' field
  * @param {String} episodePath -The episode's path
  * @param {String} imagePath - Cover Image for the episode
@@ -244,10 +236,10 @@ const sendEpisodeToChannel = async (episodePath, caption, chat_id, performer, ti
     const connectcionUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendAudio`;
     const destination = ENV === 'prod' ? chat_id : TEST_CHANNEL;
 
-    const stream = fs.createReadStream(episodePath);
+    const file = !file_id ? fs.createReadStream(episodePath) : file_id;
 
     const payload = {
-        audio: file_id === null ? stream : file_id,
+        audio: file_id === null ? file : file_id,
         disable_notification: 'true',
         parse_mode: 'html',
         caption: caption,

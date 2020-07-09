@@ -3,7 +3,7 @@ require('dotenv').config()
 const mysql = require('mysql')
 const {
     parseResponse
-} = require('../utils');
+} = require('../lib/helpers');
 
 module.exports = class Db {
     constructor() {
@@ -49,8 +49,10 @@ module.exports = class Db {
      * @param {Object} con - A database connection to close/destroy
      */
     closeConnection() {
-        this.con.destroy();
-        this.con = null;
+        if (this.con !== null) {
+            this.con.destroy();
+            this.con = null;
+        }
     }
 
     /**
