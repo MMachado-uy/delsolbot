@@ -32,8 +32,6 @@ const COVER = './assets/cover.jpg';
 const DDIR = './downloads/';
 
 const DB = new DbController();
-const TwCli = new TwController();
-const parser = new Parser();
 
 /**
  * Main Application logic
@@ -67,7 +65,7 @@ async function main() {
  * @param {string} rssUri - The url of the RSS Feed
  * @returns {Promise}
  */
-const getFeed = async rssUri => await parser.parseURL(rssUri);
+const getFeed = async rssUri => await new Parser().parseURL(rssUri);
 
 const processItem = async (item, title) => {
     const itemId = getIdFromItem(item);
@@ -99,8 +97,8 @@ const processItem = async (item, title) => {
 }
 
 /**
- * 
- * @param {*} feedItem 
+ * @param {Object} feedItem 
+ * @param {String} channelName 
  * @returns telegramMessage - see: https://core.telegram.org/bots/api#message
  */
 const sendToTelegram = async (feedItem, channelName) => {
@@ -139,7 +137,7 @@ const sendToTelegram = async (feedItem, channelName) => {
 }
 
 const sendToTwitter = async (message_id, imagePath, title, channel) => {
-    return await TwCli.tweetit(message_id, imagePath, title, channel);
+    return await new TwController().tweetit(message_id, imagePath, title, channel);
 }
 
 /**

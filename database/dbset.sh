@@ -1,4 +1,7 @@
 #!/bin/bash
+parent_path=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
+cd "$parent_path"
+
 _echo() {
     echo ">>> $@"
 }
@@ -6,12 +9,12 @@ _echo() {
 runsql() {
     _echo "Running $1..."
     
-    if [[ -f $1 ]]; then
+    if [[ -f "$1" ]]; then
         mysql -u "$DB_USER" -p"$DB_PASS" "$DB" < $1 2>&1 | sed 's/^/    /'
         _echo "Done!"
     else
         _echo "No more scripts to feed"
-        exit 1
+        exit 0
     fi
 }
 
@@ -33,7 +36,7 @@ else
     i=1
     file=$(printf "update_%03d.sql" "$i")
 
-    while [[ -f $file ]] 
+    while [[ -f "$file" ]] 
     do
         runsql $file
 
@@ -41,3 +44,5 @@ else
         file=$(printf "update_%03d.sql" "$i")
     done
 fi
+
+exit $?
