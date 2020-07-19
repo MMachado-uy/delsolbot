@@ -8,7 +8,7 @@ _echo() {
 
 runsql() {
     _echo "Running $1..."
-    
+
     if [[ -f "$1" ]]; then
         mysql -u "$DB_USER" -p"$DB_PASS" "$DB" < $1 2>&1 | sed 's/^/    /'
         _echo "Done!"
@@ -31,8 +31,13 @@ else
     mysql -u "$DB_USER" -p"$DB_PASS" -e "CREATE DATABASE IF NOT EXISTS ${DB}; USE ${DB};"
 
     runsql "schema.sql"
-    runsql "seed.sql"
-    
+
+    if [[ "$1" == "--no-seed" ]] ; then
+        _echo "No Seed"
+    else
+        runsql "seed.sql"
+    fi
+
     i=1
     file=$(printf "update_%03d.sql" "$i")
 
