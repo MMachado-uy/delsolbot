@@ -19,11 +19,11 @@ runsql() {
 if [[ $? -eq 0 ]]; then
     _echo "`date` - MySQL not running"
 else
-    DB=$(grep -w DB ../.env | cut -d '=' -f2)
-    DB_USER=$(grep -w DB_USER ../.env | cut -d '=' -f2)
-    DB_PASS=$(grep -w DB_PASS ../.env | cut -d '=' -f2)
-    DB_PORT=$(grep -w DB_PORT ../.env | cut -d '=' -f2)
-    DB_HOST=$(grep -w DB_HOST ../.env | cut -d '=' -f2)
+    DB=$(grep -w DB .env | cut -d '=' -f2)
+    DB_USER=$(grep -w DB_USER .env | cut -d '=' -f2)
+    DB_PASS=$(grep -w DB_PASS .env | cut -d '=' -f2)
+    DB_PORT=$(grep -w DB_PORT .env | cut -d '=' -f2)
+    DB_HOST=$(grep -w DB_HOST .env | cut -d '=' -f2)
 
     mysql -u "$DB_USER" -p"$DB_PASS" -e "CREATE DATABASE IF NOT EXISTS ${DB}; USE ${DB};"
 

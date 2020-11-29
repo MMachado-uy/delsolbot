@@ -1,17 +1,21 @@
 require('dotenv').config()
 
-const mysql = require('mysql')
+const mysql = require('mysql').createPool({
+    connectionLimit : 1000,
+    connectTimeout  : 60 * 60 * 1000,
+    acquireTimeout  : 60 * 60 * 1000,
+    timeout         : 60 * 60 * 1000,
+    host            : process.env.DB_HOST,
+    user            : process.env.DB_USER,
+    password        : process.env.DB_PASS,
+    database        : process.env.DB_DB
+});
 const {
     parseResponse
 } = require('../lib/helpers');
 
 module.exports = class Db {
     constructor() {
-        this.host = process.env.DB_HOST;
-        this.port = process.env.DB_PORT;
-        this.user = process.env.DB_USER;
-        this.password = process.env.DB_PASS;
-        this.database = process.env.DB;
         this.con = null;
     }
 
@@ -21,18 +25,10 @@ module.exports = class Db {
      */
     async openConnection() {
         return new Promise((resolve, reject) => {
-            const con = mysql.createConnection({
-                host: this.host,
-                port: this.port,
-                user: this.user,
-                password: this.password,
-                database: this.database
-            })
-
-            con.connect(err => {
+            mysql.getConnection((err, con) => {
                 if (err) {
                     reject([
-                        'openConnection', 
+                        'openConnection',
                         err
                     ])
                 } else {
@@ -40,8 +36,8 @@ module.exports = class Db {
 
                     resolve(con);
                 }
-            })
-        })
+            });
+        });
     }
 
     /**
@@ -50,7 +46,7 @@ module.exports = class Db {
      */
     closeConnection() {
         if (this.con !== null) {
-            this.con.destroy();
+            this.con.release();
             this.con = null;
         }
     }
@@ -95,6 +91,7 @@ module.exports = class Db {
                     }
                 })
             } catch (error) {
+                this.closeConnection();
                 reject(error)
             }
         })
