@@ -19,6 +19,7 @@
   "scripts": {
     "start": "node app.js",
     "startdb": "./database/dbset.sh",
+    "updatedb": "./database/dbset.sh --no-seed",
     "dev": "nodemon app.js"
   },
   "dependencies": {
