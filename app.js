@@ -216,7 +216,7 @@ const editMetadata = (artist, title, comment, episodePath, imagePath = COVER, tr
       APIC: imagePath,
       TRCK: track,
       image: {
-        mime: 'png/jpeg',
+        mime: 'image/jpeg',
         type: {
           id: 3,
           name: 'front cover'
