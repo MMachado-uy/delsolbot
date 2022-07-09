@@ -3,3 +3,5 @@ downloads/
 .env
 log.log
 tools/*.mp3
+manual_queue/*
+!manual_queue/.gitkeep

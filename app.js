@@ -40,31 +40,22 @@ const mainCron = new CronJob(CRON_MAIN, () => {
 /**
  * Main Application logic
  */
-async function main () {
+const main = async () => {
   try {
-    await cleanDownloads(DDIR);
-
     const rssList = await DB.getRssList();
     debug(`Found ${rssList.length} rss sources`);
 
-    for await (const rssSource of rssList) {
+    for (const rssSource of rssList) {
       log(`Starting to process ${rssSource.channel}`);
 
-      const feed = await getFeed(rssSource.url);
-      feed.items.map(item => {
-        item.channel = rssSource.channel;
+      await processFeed(rssSource);
 
-        return item;
-      });
-
-      const { title } = feed;
-
-      for await (const item of feed.items) {
-        await processItem(item, title);
-      }
+      log(`Finished processing ${rssSource.channel}`);
     }
   } catch (error) {
     logError(`Error in main process: ${error}`);
+  } finally {
+    await cleanDownloads(DDIR);
   }
 }
 
@@ -73,7 +64,22 @@ async function main () {
  * @param {string} rssUri - The url of the RSS Feed
  * @returns {Promise}
  */
-const getFeed = async rssUri => await new Parser().parseURL(rssUri);
+const getFeed = rssUri => new Parser().parseURL(rssUri);
+
+const processFeed = async rssSource => {
+  const feed = await getFeed(rssSource.url);
+  feed.items.map(item => {
+    item.channel = rssSource.channel;
+
+    return item;
+  });
+
+  const { title } = feed;
+
+  for (const item of feed.items) {
+    await processItem(item, title);
+  }
+}
 
 const processItem = async (item, title) => {
   const itemId = getIdFromItem(item);
@@ -83,9 +89,9 @@ const processItem = async (item, title) => {
     const stored = await DB.getPodcastById(itemId);
 
     const isForward = stored &&
-                          stored.length &&
-                          stored[0].pudo_subir &&
-                          !stored.some(record => record.channel === item.channel);
+                      stored.length &&
+                      stored[0].pudo_subir &&
+                      !stored.some(record => record.channel === item.channel);
 
     if (isForward) item.forwardFile = stored[0].file_id;
 
@@ -110,13 +116,11 @@ const processItem = async (item, title) => {
  * @returns telegramMessage - see: https://core.telegram.org/bots/api#message
  */
 const sendToTelegram = async (feedItem, channelName) => {
-  const { title, content, link: url } = feedItem;
-  const { image } = feedItem.itunes;
+  const { title, content, link: url, channel, itunes: { image } } = feedItem;
   const archivo = getIdFromItem(feedItem);
   const caption = `<b>${title}</b>\n${content}`;
   const folderName = sanitizeContent(channelName);
   const episodePath = `${DDIR}${folderName}/${sanitizeEpisode(title)}.mp3`;
-  const { channel } = feedItem;
 
   try {
     const forward = feedItem.forwardFile ? feedItem.forwardFile : null;
@@ -133,19 +137,20 @@ const sendToTelegram = async (feedItem, channelName) => {
     debug(`${archivo} Uploaded`);
 
     const { file_id: fileId } = telegramResponse.result.audio;
-    await DB.registerUpload(archivo, '', true, fileId, channel);
+    const { message_id } = telegramResponse.result;
+    await DB.registerUpload(archivo, '', true, fileId, channel, title, caption, url, message_id);
 
     return { ...telegramResponse.result, imagePath };
   } catch (err) {
-    logError(`${archivo} Failed to upload. ${err.message}`);
-    DB.registerUpload(archivo, err.message, false, '', channel);
+    logError(`${archivo} Failed to upload. ${err?.message ?? err}`);
+    DB.registerUpload(archivo, err.response?.body?.description ?? err.message, false, '', channel, title, caption, url);
 
     return false;
   }
 };
 
-const sendToTwitter = async (messageId, imagePath, title, channel) => {
-  return await new TwController().tweetit(messageId, imagePath, title, channel);
+const sendToTwitter = (messageId, imagePath, title, channel) => {
+  return new TwController().tweetit(messageId, imagePath, title, channel);
 };
 
 /**
@@ -155,10 +160,10 @@ const sendToTwitter = async (messageId, imagePath, title, channel) => {
  * @param {String} folder - El nombre de la carpeta a descargar
  * @returns {Promise} La ruta local del episodio
  */
-const downloadEpisode = async (episodeUrl, episodePath, folder) => {
+const downloadEpisode = (episodeUrl, episodePath, folder) => {
   if (!fs.existsSync(`${DDIR}${folder}`)) fs.mkdirSync(`${DDIR}${folder}`);
 
-  return await getMedia(episodeUrl, episodePath);
+  return getMedia(episodeUrl, episodePath);
 };
 
 /**
@@ -177,7 +182,7 @@ const downloadImage = async (imageUrl, folder) => {
   const imgName = imageUrl.split('/').pop();
   const path = `${downloadFolder}/${imgName}`;
 
-  return await getMedia(imageUrl, path);
+  return getMedia(imageUrl, path);
 };
 
 /**
@@ -240,7 +245,7 @@ const editMetadata = (artist, title, comment, episodePath, imagePath = COVER, tr
  * @param {String} file_id Previously uploaded file. If forwarded.
  * @param {String|Integer} id The Id of the Episode
  */
-const sendEpisodeToChannel = async (episodePath, caption, chatId, performer, title, id, fileId = null) => {
+const sendEpisodeToChannel = (episodePath, caption, chatId, performer, title, id, fileId = null) => {
   debug(`Sending: ${id}`);
 
   const connectcionUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendAudio`;
@@ -258,7 +263,7 @@ const sendEpisodeToChannel = async (episodePath, caption, chatId, performer, tit
     title: title
   };
 
-  return await requestP.post({
+  return requestP.post({
     url: connectcionUrl,
     formData: payload,
     json: true
