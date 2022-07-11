@@ -142,7 +142,7 @@ const sendToTelegram = async (feedItem, channelName) => {
 
     return { ...telegramResponse.result, imagePath };
   } catch (err) {
-    logError(`${archivo} Failed to upload. ${err?.message ?? err}`);
+    logError(`${archivo} Failed to upload. ${err.message ?? err}`);
     DB.registerUpload(archivo, err.response?.body?.description ?? err.message, false, '', channel, title, caption, url);
 
     return false;
