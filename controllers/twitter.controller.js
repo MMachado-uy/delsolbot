@@ -41,7 +41,7 @@ module.exports = class TwController {
      * @param {String} filePath - Ruta local de la imagen asociada al episodio
      * @returns {Promise} - La respuesta a la subida de imagenes
      */
-  subirMedia (filePath = 'cover.jpg') {
+  subirMedia (filePath = '../assets/cover.jpg') {
     const media = fs.readFileSync(filePath);
     const mediaData = fs.readFileSync(filePath, { encoding: 'base64' });
 
