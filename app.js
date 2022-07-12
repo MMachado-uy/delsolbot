@@ -103,10 +103,10 @@ const processItem = async (item, title) => {
       if (ENV === 'prod') await sendToTwitter(messageId, imagePath, item.title, item.channel);
       debug('Sent!');
     }
+
+    log(`Done processing item: ${itemId}`);
   } catch (error) {
     logError(`Error processing item ${itemId}:`, error);
-  } finally {
-    log(`Done processing item: ${itemId}`);
   }
 };
 
@@ -145,7 +145,7 @@ const sendToTelegram = async (feedItem, channelName) => {
     logError(`${archivo} Failed to upload. ${err.message ?? err}`);
     DB.registerUpload(archivo, err.response?.body?.description ?? err.message, false, '', channel, title, caption, url);
 
-    return false;
+    throw err;
   }
 };
 
