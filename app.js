@@ -1,10 +1,12 @@
 require('dotenv').config();
 
-const requestP = require('request-promise-native');
+// const requestP = require('request-promise-native');
 const CronJob = require('cron').CronJob;
 const concat = require('concat-stream');
+const FormData = require('form-data');
 const Parser = require('rss-parser');
 const NodeID3 = require('node-id3');
+const axios = require('axios');
 const fs = require('fs');
 
 const {
@@ -245,7 +247,7 @@ const editMetadata = (artist, title, comment, episodePath, imagePath = COVER, tr
  * @param {String} file_id Previously uploaded file. If forwarded.
  * @param {String|Integer} id The Id of the Episode
  */
-const sendEpisodeToChannel = (episodePath, caption, chatId, performer, title, id, fileId = null) => {
+const sendEpisodeToChannel = async (episodePath, caption, chatId, performer, title, id, fileId = null) => {
   debug(`Sending: ${id}`);
 
   const connectcionUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendAudio`;
@@ -253,21 +255,30 @@ const sendEpisodeToChannel = (episodePath, caption, chatId, performer, title, id
 
   const file = !fileId ? fs.createReadStream(episodePath) : fileId;
 
-  const payload = {
-    audio: fileId === null ? file : fileId,
-    disable_notification: 'true',
-    parse_mode: 'html',
-    caption: caption,
-    chat_id: destination,
-    performer: performer,
-    title: title
-  };
+  const payload = new FormData();
+  payload.append('audio', fileId === null ? file : fileId);
+  payload.append('disable_notification', 'true');
+  payload.append('parse_mode', 'html');
+  payload.append('caption', caption);
+  payload.append('chat_id', destination);
+  payload.append('performer', performer);
+  payload.append('title', title);
 
-  return requestP.post({
-    url: connectcionUrl,
-    formData: payload,
-    json: true
-  });
+  try {
+    const { data } = await axios({
+      method: 'post',
+      url: connectcionUrl,
+      data: payload,
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  
+    return data;  
+  } catch (error) {
+    if (typeof file.destroy === 'function') file.destroy();
+    throw error;
+  }
 };
 
 if (ENV === 'local') {

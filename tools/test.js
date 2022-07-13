@@ -2,7 +2,6 @@
 require('dotenv').config()
 
 const axios = require('axios');
-const requestP = require('request-promise-native');
 const fs = require('fs');
 const path = './coso.mp3';
 
@@ -18,7 +17,7 @@ const getFile = async () => {
 }
 
 const sendFile = () => {
-        const connectcionUrl = 'https://api.telegram.org/bot309354292:AAFszR4i7um_3tsVk8Ea9FkHa1HqoGx-QU4/sendAudio';
+        const connectcionUrl = 'redacted';
 
         const stream = fs.createReadStream(path);
 
@@ -34,11 +33,11 @@ const sendFile = () => {
 
         // const formHeaders = form.getHeaders();
 
-        return requestP.post({
-            url: connectcionUrl,
-            formData: payload,
-            json: true
-        })
+        // return requestP.post({
+        //     url: connectcionUrl,
+        //     formData: payload,
+        //     json: true
+        // })
         // .then((res) => {
         //     fs.unlink(episodePath, err => {
         //         if (err) {
