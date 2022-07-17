@@ -1,14 +1,15 @@
 require('dotenv').config();
 
-// const requestP = require('request-promise-native');
 const CronJob = require('cron').CronJob;
 const concat = require('concat-stream');
 const FormData = require('form-data');
-const Parser = require('rss-parser');
 const NodeID3 = require('node-id3');
 const axios = require('axios');
 const fs = require('fs');
 
+const TwController = require('./controllers/twitter.controller');
+const DbController = require('./controllers/db.controller');
+const DB = new DbController();
 const {
   cleanDownloads,
   debug,
@@ -17,11 +18,10 @@ const {
   getIdFromItem,
   getMedia,
   sanitizeContent,
-  sanitizeEpisode
+  sanitizeEpisode,
+  getFeed
 } = require('./lib/helpers');
 
-const TwController = require('./controllers/twitter.controller');
-const DbController = require('./controllers/db.controller');
 
 const {
   BOT_TOKEN,
@@ -29,11 +29,9 @@ const {
   CRON_MAIN,
   NODE_ENV: ENV
 } = process.env;
-
 const COVER = './assets/cover.jpg';
 const DDIR = './downloads/';
 
-const DB = new DbController();
 
 const mainCron = new CronJob(CRON_MAIN, () => {
   main();
@@ -57,16 +55,9 @@ const main = async () => {
   } catch (error) {
     logError(`Error in main process: ${error}`);
   } finally {
-    await cleanDownloads(DDIR);
+    cleanDownloads(DDIR);
   }
 }
-
-/**
- * Obtener la lista de episodios del feed
- * @param {string} rssUri - The url of the RSS Feed
- * @returns {Promise}
- */
-const getFeed = rssUri => new Parser().parseURL(rssUri);
 
 const processFeed = async rssSource => {
   const feed = await getFeed(rssSource.url);
@@ -130,7 +121,7 @@ const sendToTelegram = async (feedItem, channelName) => {
 
     if (!forward) {
       await downloadEpisode(url, episodePath, folderName);
-      await editMetadata(channelName, title, caption, episodePath, imagePath, archivo);
+      await editMetadata(channelName, title, caption, episodePath, archivo, imagePath);
     }
 
     const telegramResponse = await sendEpisodeToChannel(episodePath, caption, channel, channelName, title, archivo, forward);
@@ -196,7 +187,7 @@ const downloadImage = async (imageUrl, folder) => {
  * @param {String} imagePath - Cover Image for the episode
  * @param {Integer} track - Track number, mapped from file number
  */
-const editMetadata = (artist, title, comment, episodePath, imagePath = COVER, track) => {
+const editMetadata = (artist, title, comment, episodePath, track, imagePath = COVER) => {
   return new Promise((resolve, reject) => {
     debug('Started Metadating');
 
@@ -276,6 +267,7 @@ const sendEpisodeToChannel = async (episodePath, caption, chatId, performer, tit
   
     return data;  
   } catch (error) {
+    // If file is a Read Stream, destroy it
     if (typeof file.destroy === 'function') file.destroy();
     throw error;
   }
