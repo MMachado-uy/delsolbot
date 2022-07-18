@@ -1,7 +1,6 @@
 require('dotenv').config();
 
 const CronJob = require('cron').CronJob;
-const concat = require('concat-stream');
 const FormData = require('form-data');
 const NodeID3 = require('node-id3');
 const axios = require('axios');
@@ -121,7 +120,7 @@ const sendToTelegram = async (feedItem, channelName) => {
 
     if (!forward) {
       await downloadEpisode(url, episodePath, folderName);
-      await editMetadata(channelName, title, caption, episodePath, archivo, imagePath);
+      editMetadata(channelName, title, caption, episodePath, archivo, imagePath);
     }
 
     const telegramResponse = await sendEpisodeToChannel(episodePath, caption, channel, channelName, title, archivo, forward);
@@ -188,43 +187,26 @@ const downloadImage = async (imageUrl, folder) => {
  * @param {Integer} track - Track number, mapped from file number
  */
 const editMetadata = (artist, title, comment, episodePath, track, imagePath = COVER) => {
-  return new Promise((resolve, reject) => {
-    debug('Started Metadating');
+  debug('Started Metadating');
 
-    let coverBuffer = null;
-    const readStream = fs.createReadStream(imagePath);
-    const concatStream = concat(buff => {
-      coverBuffer = buff;
+  const coverBuffer = fs.readFileSync(imagePath);
+  const tags = {
+    artist,
+    title,
+    comment,
+    TRCK: track,
+    image: {
+      mime: 'image/jpeg',
+      type: {
+        id: 3,
+        name: 'front cover'
+      },
+      description: 'front cover',
+      imageBuffer: coverBuffer
+    }
+  };
 
-      return coverBuffer;
-    });
-
-    readStream.on('error', (err) => reject(err));
-    readStream.pipe(concatStream);
-
-    const tags = {
-      artist,
-      title,
-      comment,
-      APIC: imagePath,
-      TRCK: track,
-      image: {
-        mime: 'image/jpeg',
-        type: {
-          id: 3,
-          name: 'front cover'
-        },
-        description: 'front cover',
-        imageBuffer: coverBuffer
-      }
-    };
-
-    NodeID3.write(tags, episodePath, (err) => {
-      debug('Metadata callback');
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  return NodeID3.write(tags, episodePath);
 };
 
 /**

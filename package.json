@@ -1,6 +1,6 @@
 {
   "name": "delsolbot",
-  "version": "2.4.2",
+  "version": "2.4.3",
   "description": "Integration between radio station RSS feeds and Telegram bot to publish in the corresponding Telegram channels",
   "main": "app.js",
   "keywords": [
@@ -24,7 +24,6 @@
   },
   "dependencies": {
     "axios": "^0.27.2",
-    "concat-stream": "^2.0.0",
     "cron": "^2.0.0",
     "dotenv": "^16.0.1",
     "form-data": "^4.0.0",
