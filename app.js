@@ -92,7 +92,13 @@ const processItem = async (item, title) => {
       const { message_id: messageId, imagePath } = telegramMessage;
 
       debug('Sending to Twitter...');
-      if (ENV === 'prod') await sendToTwitter(messageId, imagePath, item.title, item.channel);
+
+      try {
+        if (ENV === 'prod') await sendToTwitter(messageId, imagePath, item.title, item.channel);
+      } catch (error) {
+        log('Elon finally did it - Unable to post to Twitter API :: ', error);
+      }
+
       debug('Sent!');
     }
 
