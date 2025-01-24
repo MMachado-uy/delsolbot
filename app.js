@@ -33,7 +33,9 @@ const DDIR = './downloads/';
 
 
 const mainCron = new CronJob(CRON_MAIN, () => {
-  main();
+  main().catch(e => {
+    logError(e);
+  });
 }, null);
 
 /**
@@ -68,9 +70,9 @@ const processFeed = async rssSource => {
 
   const { title } = feed;
 
-  for (const item of feed.items) {
+  feed.items.forEach(async item => {
     await processItem(item, title);
-  }
+  })
 }
 
 const processItem = async (item, title) => {
@@ -141,7 +143,7 @@ const sendToTelegram = async (feedItem, channelName) => {
     return { ...telegramResponse.result, imagePath };
   } catch (err) {
     logError(`${archivo} Failed to upload. ${err.message ?? err}`);
-    DB.registerUpload(archivo, err.response?.body?.description ?? err.message, false, '', channel, title, caption, url);
+    await DB.registerUpload(archivo, err.response?.body?.description ?? err.message, false, '', channel, title, caption, url);
 
     throw err;
   }
@@ -190,12 +192,13 @@ const downloadImage = async (imageUrl, folder) => {
  * @param {String} comment - Episode's description, mapped to the 'comment' field
  * @param {String} episodePath -The episode's path
  * @param {String} imagePath - Cover Image for the episode
- * @param {Integer} track - Track number, mapped from file number
+ * @param {Number} track - Track number, mapped from file number
  */
 const editMetadata = (artist, title, comment, episodePath, track, imagePath = COVER) => {
   debug('Started Metadating');
 
   const coverBuffer = fs.readFileSync(imagePath);
+  const episodeBuffer = fs.readFileSync(episodePath);
   const tags = {
     artist,
     title,
@@ -212,24 +215,24 @@ const editMetadata = (artist, title, comment, episodePath, track, imagePath = CO
     }
   };
 
-  return NodeID3.write(tags, episodePath);
+  return NodeID3.write(tags, episodeBuffer);
 };
 
 /**
  * Posts the actual audio file to Telegram
  * @param {String} episodePath The path to the downloaded episode file
  * @param {String} caption The Message attached to the audio file
- * @param {String} chat_id Telegram's chat id '@something'
+ * @param {String} chatId Telegram's chat id '@something'
  * @param {String} performer Name of the Channel
  * @param {String} title Title of the episode
  * @param {String} id Id of the episode
- * @param {String} file_id Previously uploaded file. If forwarded.
- * @param {String|Integer} id The Id of the Episode
+ * @param {String} fileId Previously uploaded file. If forwarded.
+ * @param {String|Number} id The ID of the Episode
  */
 const sendEpisodeToChannel = async (episodePath, caption, chatId, performer, title, id, fileId = null) => {
   debug(`Sending: ${id}`);
 
-  const connectcionUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendAudio`;
+  const connectionUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendAudio`;
   const destination = ENV === 'prod' ? chatId : TEST_CHANNEL;
 
   const file = !fileId ? fs.createReadStream(episodePath) : fileId;
@@ -246,7 +249,7 @@ const sendEpisodeToChannel = async (episodePath, caption, chatId, performer, tit
   try {
     const { data } = await axios({
       method: 'post',
-      url: connectcionUrl,
+      url: connectionUrl,
       data: payload,
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
@@ -262,7 +265,9 @@ const sendEpisodeToChannel = async (episodePath, caption, chatId, performer, tit
 };
 
 if (ENV === 'local') {
-  main();
+  main().catch(e => {
+    logError(e);
+  });
 } else {
   mainCron.start();
 }

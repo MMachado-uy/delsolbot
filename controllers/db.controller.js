@@ -39,7 +39,6 @@ module.exports = class Db {
 
     /**
      * Closes/destroys a database connection
-     * @param {Object} con - A database connection to close/destroy
      */
     closeConnection() {
         if (this.con !== null) {
