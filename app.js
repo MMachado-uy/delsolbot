@@ -1,11 +1,12 @@
 require('dotenv').config();
 
 const path = require('path');
+const fsP = require('node:fs/promises');
 const fs = require('fs');
 
 const CronJob = require('cron').CronJob;
 const FormData = require('form-data');
-const NodeID3 = require('node-id3');
+const NodeID3 = require('node-id3').Promise;
 const axios = require('axios');
 
 const DbController = require('./controllers/db.controller');
@@ -138,17 +139,15 @@ const sendToTelegram = async (feedItem, channelName) => {
         let success = true;
         for (const [i, episodePath] of episodePaths.entries()) {
             try {
-                if (hadToSplit) caption = `(Parte ${i}) ${caption}`;
-
                 debug({ episodePath, caption, channel, channelName, title: pathToTitle(episodePath), fileId, forward });
-                const telegramResponse = await sendEpisodeToChannel(episodePath, `${caption}`, channel, channelName, pathToTitle(episodePath), fileId, forward);
+                const telegramResponse = await sendEpisodeToChannel(episodePath, `${hadToSplit ? `(Parte ${i + 1}) ${caption}` : caption}`, channel, channelName, pathToTitle(episodePath), fileId, forward);
 
                 debug(telegramResponse);
                 debug(`${fileId} Uploaded`);
 
                 const { file_id } = telegramResponse.result.audio;
                 const { message_id } = telegramResponse.result;
-                await DB.registerUpload(fileId, '', true, file_id, channel, pathToTitle(episodePath), caption, url, message_id);
+                await DB.registerUpload(fileId, '', true, `${file_id}${hadToSplit ? `-${i}` : ''}`, channel, pathToTitle(episodePath), caption, url, message_id);
 
                 success = success && true;
             } catch (error) {
@@ -206,25 +205,29 @@ const downloadImage = async (imageUrl, folder) => {
  * @param {String} imagePath - Cover Image for the episode
  * @param {Number|String} track - Track number, mapped from file number
  */
-const editMetadata = (artist, title, comment, episodePath, track, imagePath = COVER) => {
+const editMetadata = async (artist, title, comment, episodePath, track, imagePath = COVER) => {
     debug('Started Metadating');
     debug({artist, title, comment, episodePath, track, imagePath});
 
-    const coverBuffer = fs.readFileSync(imagePath);
-    const episodeBuffer = fs.readFileSync(episodePath);
+    const coverBuffer = await fsP.readFile(imagePath);
+    debug({coverBuffer});
+
+    const episodeBuffer = await fsP.readFile(episodePath);
+    debug({episodeBuffer});
+
     const tags = {
+        trackNumber: track,
         artist,
         title,
-        comment,
-        TRCK: track,
-        image: {
-        mime: 'image/jpeg',
-        type: {
-            id: 3,
-            name: 'front cover'
-        },
-        description: 'front cover',
-        imageBuffer: coverBuffer
+        comment: { language: 'spa', text: comment },
+        APIC: {
+            mime: 'image/jpeg',
+            imageBuffer: coverBuffer,
+            description: 'front cover',
+            type: {
+                id: 3,
+                name: 'front cover'
+            }
         }
     };
 
