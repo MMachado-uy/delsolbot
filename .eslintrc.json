@@ -13,7 +13,7 @@
         "array-bracket-newline": "error",
         "array-bracket-spacing": "error",
         "array-callback-return": "error",
-        "array-element-newline": "error",
+        "array-element-newline": "off",
         "arrow-body-style": "off",
         "arrow-parens": "off",
         "arrow-spacing": [
@@ -236,7 +236,7 @@
         "prefer-const": "off",
         "prefer-destructuring": "off",
         "prefer-exponentiation-operator": "error",
-        "prefer-named-capture-group": "error",
+        "prefer-named-capture-group": "off",
         "prefer-numeric-literals": "error",
         "prefer-object-spread": "error",
         "prefer-promise-reject-errors": "off",
