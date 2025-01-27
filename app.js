@@ -1,7 +1,6 @@
 require('dotenv').config();
 
 const path = require('path');
-const fsP = require('node:fs/promises');
 const fs = require('fs');
 
 const CronJob = require('cron').CronJob;
@@ -11,6 +10,7 @@ const axios = require('axios');
 
 const DbController = require('./controllers/db.controller');
 const DB = new DbController();
+const { splitEpisode } = require('./lib/splitter');
 const {
     cleanDownloads,
     debug,
@@ -21,10 +21,9 @@ const {
     sanitizeContent,
     sanitizeEpisode,
     getFeed,
-    getFileSizeInMB,
-    pathToTitle
+    pathToTitle,
+    pause
 } = require('./lib/helpers');
-const { splitEpisode } = require('./lib/splitter');
 
 const {
     BOT_TOKEN,
@@ -34,7 +33,6 @@ const {
 } = process.env;
 const COVER = './assets/cover.jpg';
 const DDIR = './downloads/';
-const TELEGRAM_THRESHOLD = 50;
 
 const mainCron = new CronJob(CRON_MAIN, () => {
     main().catch(e => {
@@ -51,11 +49,12 @@ const main = async () => {
         debug(`Found ${rssList.length} rss sources`);
 
         for (const rssSource of rssList) {
-        log(`Starting to process ${rssSource.channel}`);
+            log(`Starting to process ${rssSource.channel}`);
 
-        await processFeed(rssSource);
+            await processFeed(rssSource);
+            await pause(1000);
 
-        log(`Finished processing ${rssSource.channel}`);
+            log(`Finished processing ${rssSource.channel}`);
         }
     } catch (error) {
         logError(`Error in main process: ${error}`);
@@ -86,8 +85,7 @@ const processItem = async (item, title) => {
     try {
         const stored = await DB.getPodcastById(itemId);
 
-        const isForward = stored &&
-                        stored.length &&
+        const isForward = stored?.length &&
                         stored[0].pudo_subir &&
                         !stored.some(record => record.channel === item.channel);
 
@@ -111,44 +109,43 @@ const processItem = async (item, title) => {
  */
 const sendToTelegram = async (feedItem, channelName) => {
     const { title, content, link: url, channel, itunes: { image } } = feedItem;
-    const fileId = getIdFromItem(feedItem);
+    const episodeNumber = getIdFromItem(feedItem);
     const folderName = sanitizeContent(channelName);
     const fileName = `${sanitizeEpisode(title)}.mp3`;
     let caption = `<b>${title}</b>\n${content}`;
-    let episodePaths = [path.join(DDIR, folderName, fileName)];
     let hadToSplit = false;
 
     try {
-        const forward = feedItem.forwardFile ? feedItem.forwardFile : null;
+        const originalPath = path.join(DDIR, folderName, fileName);
+
+        const forwardId = feedItem.forwardFile ? feedItem.forwardFile : null;
         const imagePath = await downloadImage(image, folderName);
 
-        if (!forward) {
-            await downloadEpisode(url, episodePaths[0], folderName);
+        if (!forwardId) {
+            await downloadEpisode(url, originalPath, folderName);
         }
 
-        if (getFileSizeInMB(episodePaths[0]) > TELEGRAM_THRESHOLD) {
-            hadToSplit = true;
-            episodePaths = await splitEpisode(fileName, path.join(DDIR, folderName));
-        }
-
-        for (let i = 0; i < episodePaths.length; i++) {
-            const part = episodePaths[i];
-            await editMetadata(channelName, pathToTitle(part), caption, part, `${fileId}-${i}`, imagePath);
-        }
+        let episodePaths = await splitEpisode(path.join(DDIR, folderName, fileName), pathToTitle(fileName));
+        hadToSplit = episodePaths.length > 1;
 
         let success = true;
         for (const [i, episodePath] of episodePaths.entries()) {
             try {
-                debug({ episodePath, caption, channel, channelName, title: pathToTitle(episodePath), fileId, forward });
-                const telegramResponse = await sendEpisodeToChannel(episodePath, `${hadToSplit ? `(Parte ${i + 1}) ${caption}` : caption}`, channel, channelName, pathToTitle(episodePath), fileId, forward);
+                const track = hadToSplit ? `${episodeNumber}-${i + 1}` : episodeNumber;
+                const currentCaption = hadToSplit ? `(Parte ${i + 1}) ${caption}` : caption;
+
+                await editMetadata(channelName, pathToTitle(episodePath), caption, episodePath, track, imagePath);
+
+                debug({ episodePath, currentCaption, channel, channelName, title: pathToTitle(episodePath), episodeNumber, forwardId });
+                const telegramResponse = await sendEpisodeToChannel(episodePath, currentCaption, channel, channelName, pathToTitle(episodePath), track, forwardId);
 
                 debug(telegramResponse);
-                debug(`${fileId} Uploaded`);
+                debug(`${episodeNumber} Uploaded`);
 
                 const { file_id } = telegramResponse.result.audio;
                 const { message_id } = telegramResponse.result;
 
-                const uploadStatus = { archivo, obs: '', exito: true, fileId: `${file_id}${hadToSplit ? `-${i}` : ''}`, channel, title: pathToTitle(episodePath), caption, url, message_id };
+                const uploadStatus = { archivo: track, obs: '', exito: true, fileId: file_id, channel, title: pathToTitle(episodePath), caption, url, message_id };
                 await DB.registerUpload(uploadStatus);
 
                 success = success && true;
@@ -159,15 +156,11 @@ const sendToTelegram = async (feedItem, channelName) => {
 
         return success;
     } catch (err) {
-        logError(`${fileId} Failed to upload. ${err.message ?? err}`);
-        await DB.registerUpload(fileId, err.response?.body?.description ?? err.message, false, '', channel, title, caption, url);
+        logError(`${episodeNumber} Failed to upload. ${err.message ?? err}`);
+        await DB.registerUpload(episodeNumber, err.response?.body?.description ?? err.message, false, '', channel, title, caption, url);
 
         throw err;
     }
-};
-
-const sendToTwitter = (messageId, imagePath, title, channel) => {
-  return new TwController().tweetit(messageId, imagePath, title, channel);
 };
 
 /**
@@ -211,28 +204,32 @@ const downloadImage = async (imageUrl, folder) => {
  * @param {String} imagePath - Cover Image for the episode
  * @param {Number} track - Track number, mapped from file number
  */
-const editMetadata = (artist, title, comment, episodePath, track, imagePath = COVER) => {
-  debug('Started Metadating');
-
-  const coverBuffer = fs.readFileSync(imagePath);
-  const episodeBuffer = fs.readFileSync(episodePath);
-  const tags = {
-    artist,
-    title,
-    comment,
-    TRCK: track,
-    image: {
-      mime: 'image/jpeg',
-      type: {
-        id: 3,
-        name: 'front cover'
-      },
-      description: 'front cover',
-      imageBuffer: coverBuffer
+const editMetadata = async (artist, title, comment, episodePath, track, imagePath = COVER) => {
+    try {
+        debug(`Started editing metadata for: ${episodePath}`);
+        
+        const coverBuffer = await fs.promises.readFile(imagePath);
+        
+        const tags = {
+            artist,
+            title,
+            comment,
+            TRCK: track,
+            image: {
+                mime: 'image/jpeg',
+                type: { id: 3, name: 'front cover' },
+                description: 'front cover',
+                imageBuffer: coverBuffer
+            }
+        };
+        
+        await NodeID3.write(tags, episodePath);
+        debug('Metadata editing completed successfully.');
+    } catch (error) {
+        logError(`Error editing metadata: ${error.message}`);
+        logError(error);
+        throw error;
     }
-  };
-
-  return NodeID3.write(tags, episodeBuffer);
 };
 
 /**
@@ -248,6 +245,7 @@ const editMetadata = (artist, title, comment, episodePath, track, imagePath = CO
  */
 const sendEpisodeToChannel = async (episodePath, caption, chatId, performer, title, id, fileId = null) => {
     debug(`Sending: ${id}`);
+    debug({episodePath, caption, chatId, performer, title, id, fileId});
 
     const connectionUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendAudio`;
     const destination = ENV === 'prod' ? chatId : TEST_CHANNEL;
