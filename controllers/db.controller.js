@@ -1,10 +1,8 @@
 require('dotenv').config();
 
-const mysql = require('mysql').createPool({
-    connectionLimit: 1000,
+const mysql = require('mysql2/promise').createPool({
+    connectionLimit: 100,
     connectTimeout: 60 * 60 * 1000,
-    acquireTimeout: 60 * 60 * 1000,
-    timeout: 60 * 60 * 1000,
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASS,
@@ -21,20 +19,7 @@ module.exports = class Db {
      * @returns {Promise} A new database connection, or error message
      */
     async openConnection() {
-        return new Promise((resolve, reject) => {
-            mysql.getConnection((err, con) => {
-                if (err) {
-                    reject([
-                        'openConnection',
-                        err
-                    ])
-                } else {
-                    this.con = con;
-
-                    resolve(con);
-                }
-            });
-        });
+        this.con = await mysql.getConnection();
     }
 
     /**
@@ -56,7 +41,7 @@ module.exports = class Db {
      * @param {string} channel - The channel this audio was uploaded to
      * @returns {Promise} The rows affected by the insert, or error message
      */
-    async registerUpload(
+    async registerUpload({
         archivo, 
         obs = '', 
         exito, 
@@ -65,46 +50,34 @@ module.exports = class Db {
         title = '', 
         caption = '', 
         url = '',
-        msg_id = ''
-    ) {
+        message_id = ''
+    }) {
         let channelId = null;
         if (channel !== '') channelId = await this.getChannelId(channel);
 
         await this.openConnection();
 
-        return new Promise((resolve, reject) => {
-            try {
-                this.con.query({
-                    sql: 'INSERT INTO `podcasts` (archivo, obs, pudo_subir, file_id, destino, title, caption, url, msg_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    timeout: 40000,
-                    values: [
-                        archivo,
-                        obs,
-                        exito ? 1 : 0,
-                        fileId,
-                        channelId,
-                        title,
-                        caption,
-                        url,
-                        msg_id
-                    ]
-                }, (err, results) => {
-                    this.closeConnection();
+        const query = 'INSERT INTO `podcasts` (archivo, obs, pudo_subir, file_id, destino, title, caption, url, msg_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        const params = [
+            archivo,
+            obs,
+            exito ? 1 : 0,
+            fileId,
+            channelId,
+            title,
+            caption,
+            url,
+            message_id
+        ];
 
-                    if (err) {
-                        reject([
-                            `${archivo} registerUpload`,
-                            err
-                        ]);
-                    } else {
-                        resolve(results);
-                    }
-                })
-            } catch (error) {
-                this.closeConnection();
-                reject(error)
-            }
-        })
+        try {
+            const [rows] = await this.con.execute(query, params);
+
+            return rows;
+        } catch (err) {
+            this.closeConnection();
+            throw err;
+        }
     }
 
     /**
@@ -113,21 +86,9 @@ module.exports = class Db {
      */
     async getRssList() {
         await this.openConnection();
+        const [rows] = await this.con.execute('SELECT url, channel, nombre FROM `sources`');
 
-        return new Promise((resolve, reject) => {
-            this.con.query({
-                sql: 'SELECT url, channel, nombre FROM `sources`',
-                timeout: 40000
-            }, (err, results) => {
-                this.closeConnection();
-
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(results);
-                }
-            });
-        });
+        return rows;
     }
 
     /**
@@ -138,21 +99,10 @@ module.exports = class Db {
     async getPodcastById(id) {
         await this.openConnection();
 
-        return new Promise((resolve, reject) => {
-            this.con.query({
-                sql: 'SELECT p.id, p.archivo, p.obs, p.pudo_subir, p.fecha_procesado, p.file_id, s.channel FROM `podcasts` AS p, `sources` AS s WHERE p.archivo = ? AND s.id = p.destino',
-                timeout: 40000,
-                values: [id]
-            }, (err, results) => {
-                this.closeConnection();
+        const query = 'SELECT p.id, p.archivo, p.obs, p.pudo_subir, p.fecha_procesado, p.file_id, s.channel FROM `podcasts` AS p, `sources` AS s WHERE p.archivo = ? AND s.id = p.destino';
+        const [rows] = await this.con.execute(query, [id]);
 
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(results);
-                }
-            });
-        });
+        return rows;
     }
 
     /**
@@ -162,20 +112,9 @@ module.exports = class Db {
     async getFailedPodcasts() {
         await this.openConnection();
 
-        return new Promise((resolve, reject) => {
-            this.con.query({
-                sql: 'SELECT * FROM `podcasts` WHERE `pudo_subir` = 0',
-                timeout: 40000
-            }, (err, results) => {
-                this.closeConnection();
+        const [rows] = await this.con.execute('SELECT * FROM `podcasts` WHERE `pudo_subir` = 0');
 
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(results);
-                }
-            });
-        });
+        return rows;
     }
 
     /**
@@ -185,39 +124,16 @@ module.exports = class Db {
     async getStoredPodcasts() {
         await this.openConnection();
 
-        return new Promise((resolve, reject) => {
-            this.con.query({
-                sql: 'SELECT id, archivo FROM `podcasts`',
-                timeout: 40000
-            }, (err, results) => {
-                this.closeConnection();
+        const [rows] = await this.con.execute('SELECT id, archivo FROM `podcasts`');
 
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(results);
-                }
-            });
-        });
+        return rows;
     }
 
     async getChannelId(channel) {
         await this.openConnection();
 
-        return new Promise((resolve, reject) => {
-            this.con.query({
-                sql: 'SELECT id FROM sources WHERE channel = ?',
-                timeout: 40000,
-                values: [channel]
-            }, (err, results) => {
-                this.closeConnection();
+        const [rows] = await this.con.execute('SELECT id FROM sources WHERE channel = ?', [channel]);
 
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(results[0].id);
-                }
-            });
-        });
+        return rows[0].id;
     }
 };

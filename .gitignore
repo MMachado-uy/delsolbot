@@ -8,3 +8,5 @@ manual_queue/*
 !manual_queue/.gitkeep
 .vscode
 .DS_Store
+.idea
+.fleet

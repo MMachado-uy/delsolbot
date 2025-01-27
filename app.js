@@ -147,7 +147,9 @@ const sendToTelegram = async (feedItem, channelName) => {
 
                 const { file_id } = telegramResponse.result.audio;
                 const { message_id } = telegramResponse.result;
-                await DB.registerUpload(fileId, '', true, `${file_id}${hadToSplit ? `-${i}` : ''}`, channel, pathToTitle(episodePath), caption, url, message_id);
+
+                const uploadStatus = { archivo, obs: '', exito: true, fileId: `${file_id}${hadToSplit ? `-${i}` : ''}`, channel, title: pathToTitle(episodePath), caption, url, message_id };
+                await DB.registerUpload(uploadStatus);
 
                 success = success && true;
             } catch (error) {
@@ -162,6 +164,10 @@ const sendToTelegram = async (feedItem, channelName) => {
 
         throw err;
     }
+};
+
+const sendToTwitter = (messageId, imagePath, title, channel) => {
+  return new TwController().tweetit(messageId, imagePath, title, channel);
 };
 
 /**
@@ -203,35 +209,30 @@ const downloadImage = async (imageUrl, folder) => {
  * @param {String} comment - Episode's description, mapped to the 'comment' field
  * @param {String} episodePath -The episode's path
  * @param {String} imagePath - Cover Image for the episode
- * @param {Number|String} track - Track number, mapped from file number
+ * @param {Number} track - Track number, mapped from file number
  */
-const editMetadata = async (artist, title, comment, episodePath, track, imagePath = COVER) => {
-    debug('Started Metadating');
-    debug({artist, title, comment, episodePath, track, imagePath});
+const editMetadata = (artist, title, comment, episodePath, track, imagePath = COVER) => {
+  debug('Started Metadating');
 
-    const coverBuffer = await fsP.readFile(imagePath);
-    debug({coverBuffer});
+  const coverBuffer = fs.readFileSync(imagePath);
+  const episodeBuffer = fs.readFileSync(episodePath);
+  const tags = {
+    artist,
+    title,
+    comment,
+    TRCK: track,
+    image: {
+      mime: 'image/jpeg',
+      type: {
+        id: 3,
+        name: 'front cover'
+      },
+      description: 'front cover',
+      imageBuffer: coverBuffer
+    }
+  };
 
-    const episodeBuffer = await fsP.readFile(episodePath);
-    debug({episodeBuffer});
-
-    const tags = {
-        trackNumber: track,
-        artist,
-        title,
-        comment: { language: 'spa', text: comment },
-        APIC: {
-            mime: 'image/jpeg',
-            imageBuffer: coverBuffer,
-            description: 'front cover',
-            type: {
-                id: 3,
-                name: 'front cover'
-            }
-        }
-    };
-
-    return NodeID3.write(tags, episodeBuffer);
+  return NodeID3.write(tags, episodeBuffer);
 };
 
 /**
@@ -243,7 +244,7 @@ const editMetadata = async (artist, title, comment, episodePath, track, imagePat
  * @param {String} title Title of the episode
  * @param {String} id Id of the episode
  * @param {String} fileId Previously uploaded file. If forwarded.
- * @param {String|Number} id The ID of the Episode
+ * @param {String|Number} id The Id of the Episode
  */
 const sendEpisodeToChannel = async (episodePath, caption, chatId, performer, title, id, fileId = null) => {
     debug(`Sending: ${id}`);
