@@ -84,6 +84,7 @@ const processItem = async (item, title) => {
 
     try {
         const stored = await DB.getPodcastById(itemId);
+        debug({ stored });
 
         const isForward = stored?.length &&
                         stored[0].pudo_subir &&

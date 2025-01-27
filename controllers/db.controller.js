@@ -1,6 +1,8 @@
 require('dotenv').config();
 
-const { logError } = require('../lib/helpers');
+const { logError,
+    debug
+} = require('../lib/helpers');
 
 const mysql = require('mysql2/promise');
 
@@ -101,9 +103,10 @@ module.exports = class Db {
             FROM podcasts AS p 
             JOIN sources AS s ON s.id = p.destino 
             WHERE p.archivo = ?
+               OR p.archivo LIKE CONCAT(?,'-%')
         `;
 
-        return this.executeQuery(query, [id]);
+        return this.executeQuery(query, [id, id]);
     }
 
     /**
