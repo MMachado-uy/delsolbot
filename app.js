@@ -165,7 +165,7 @@ const sendToTelegram = async (feedItem, channelName) => {
 };
 
 /**
- * Decarga un episodio al servidor para luego procesar su metadata
+ * Descarga un episodio al servidor para luego procesar su metadata
  * @param {String} episodeUrl - La url del episodio a descargar
  * @param {String} episodePath - La ruta local donde almacenarlo
  * @param {String} folder - El nombre de la carpeta a descargar
