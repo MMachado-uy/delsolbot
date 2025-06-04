@@ -236,13 +236,12 @@ const editMetadata = async (artist, title, comment, episodePath, track, imagePat
 /**
  * Posts the actual audio file to Telegram
  * @param {String} episodePath The path to the downloaded episode file
- * @param {String} caption The Message attached to the audio file
+ * @param {String} caption The message attached to the audio file
  * @param {String} chatId Telegram's chat id '@something'
  * @param {String} performer Name of the Channel
  * @param {String} title Title of the episode
- * @param {String} id Id of the episode
- * @param {String} fileId Previously uploaded file. If forwarded.
- * @param {String|Number} id The Id of the Episode
+ * @param {String|Number} id The Id of the episode
+ * @param {String} fileId Previously uploaded file id. If forwarded
  */
 const sendEpisodeToChannel = async (episodePath, caption, chatId, performer, title, id, fileId = null) => {
     debug(`Sending: ${id}`);
