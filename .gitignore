@@ -10,3 +10,4 @@ manual_queue/*
 .DS_Store
 .idea
 .fleet
+package-lock.json
