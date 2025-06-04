@@ -1,19 +1,19 @@
 require('dotenv').config();
 
-const mysql = require('mysql').createPool({
-    connectionLimit : 1000,
-    connectTimeout  : 60 * 60 * 1000,
-    acquireTimeout  : 60 * 60 * 1000,
-    timeout         : 60 * 60 * 1000,
-    host            : process.env.DB_HOST,
-    user            : process.env.DB_USER,
-    password        : process.env.DB_PASS,
-    database        : process.env.DB
-});
-
-const {
-  parseResponse
+const { logError,
+    debug
 } = require('../lib/helpers');
+
+const mysql = require('mysql2/promise');
+
+const pool = mysql.createPool({
+    connectionLimit: 100,
+    connectTimeout: 60 * 60 * 1000,
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    database: process.env.DB
+});
 
 module.exports = class Db {
     constructor() {
@@ -21,194 +21,123 @@ module.exports = class Db {
     }
 
     /**
-     * Get a new database connection
-     * @returns {Promise} A new database connection, or error message
+     * Executes a database query with provided parameters.
+     * @param {string} query - SQL query to execute.
+     * @param {Array} params - Parameters for the query.
+     * @returns {Promise<any>} Query result.
      */
-    async openConnection() {
-        return new Promise((resolve, reject) => {
-            mysql.getConnection((err, con) => {
-                if (err) {
-                    reject([
-                        'openConnection',
-                        err
-                    ])
-                } else {
-                    this.con = con;
+    async executeQuery(query, params = []) {
+        try {
+            this.con = await pool.getConnection();
+            const [rows] = await this.con.execute(query, params);
 
-                    resolve(con);
-                }
-            });
-        });
-    }
-
-  /**
-   * Closes/destroys a database connection
-   * @param {Object} con - A database connection to close/destroy
-   */
-  closeConnection() {
-        if (this.con !== null) {
-            this.con.release();
-            this.con = null;
-        }
-  }
-
-  /**
-     * Register in the database the upload response for each podcast
-     * @param {string} archivo - Name of the file to register
-     * @param {string} obs - A comment
-     * @param {boolean} exito - The status of the upload
-     * @param {string} fileId - The id returned by Telegram
-     * @param {string} channel - The channel this audio was uploaded to
-     * @returns {Promise} The rows affected by the insert, or error message
-     */
-    async registerUpload(archivo, obs = '', exito, fileId = '', channel = '') {
-        let channelId = null;
-        if (channel !== '') channelId = await this.getChannelId(channel);
-
-        await this.openConnection();
-
-        return new Promise((resolve, reject) => {
-            try {
-                this.con.query({
-                    sql: 'INSERT INTO `podcasts` (archivo, obs, pudo_subir, file_id, destino) VALUES (?, ?, ?, ?, ?)',
-                    timeout: 40000,
-                    values: [
-                        archivo,
-                        parseResponse(obs),
-                        exito ? 1 : 0,
-                        fileId,
-                        channelId
-                    ]
-                }, (err, results) => {
-                    this.closeConnection();
-
-                    if (err) {
-                        reject([
-                            `${archivo} registerUpload`,
-                            err
-                        ]);
-                    } else {
-                        resolve(results);
-                    }
-                })
-            } catch (error) {
-                this.closeConnection();
-                reject(error)
+            return rows;
+        } catch (err) {
+            logError(`Database query failed: ${query} - Params: ${params}`, err);
+            throw err;
+        } finally {
+            if (this.con) {
+                this.con.release();
+                this.con = null;
             }
-        })
+        }
     }
 
     /**
-     * Get the RSS sources list
-     * @returns {Promise} The list of RSS sources url's, or error message
+     * Registers a podcast upload in the database.
+     * @param {Object} data - Podcast upload data.
+     * @returns {Promise<any>} Insert result.
      */
-    async getRssList () {
-    await this.openConnection();
+    async registerUpload({
+        archivo,
+        obs = '',
+        exito,
+        fileId = '',
+        channel = '',
+        title = '',
+        caption = '',
+        url = '',
+        message_id = ''
+    }) {
+        const channelId = channel ? await this.getChannelId(channel) : null;
+        const query = `
+            INSERT INTO podcasts 
+            (archivo, obs, pudo_subir, file_id, destino, title, caption, url, msg_id) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        const params = [
+            archivo,
+            obs,
+            exito ? 1 : 0,
+            fileId,
+            channelId,
+            title,
+            caption,
+            url,
+            message_id
+        ];
 
-    return new Promise((resolve, reject) => {
-      this.con.query({
-        sql: 'SELECT url, channel, nombre FROM `sources`',
-        timeout: 40000
-      }, (err, results) => {
-        this.closeConnection();
+        return this.executeQuery(query, params);
+    }
 
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
-        }
-      });
-    });
-  }
-
-  /**
-     * Get a single podcast episode
-     * @param {string} id - The filename of the podcast to search
-     * @returns {Promise} The row representation of the status of the given podcast, or error message
+    /**
+     * Retrieves the RSS sources list.
+     * @returns {Promise<Array>} List of RSS sources.
      */
-  async getPodcastById (id) {
-    await this.openConnection();
+    async getRssList() {
+        const query = 'SELECT url, channel, nombre FROM sources';
 
-    return new Promise((resolve, reject) => {
-      this.con.query({
-        sql: 'SELECT p.id, p.archivo, p.obs, p.pudo_subir, p.fecha_procesado, p.file_id, s.channel FROM `podcasts` AS p, `sources` AS s WHERE p.archivo = ? AND s.id = p.destino',
-        timeout: 40000,
-        values: [id]
-      }, (err, results) => {
-        this.closeConnection();
+        return this.executeQuery(query);
+    }
 
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
-        }
-      });
-    });
-  }
-
-  /**
-     * Get the list of the failed uploads
-     * @returns {Promise} The list of the uploads rejected by Telegram, or error message
+    /**
+     * Retrieves a podcast episode by its ID.
+     * @param {string} id - Podcast ID.
+     * @returns {Promise<Array>} Podcast details.
      */
-  async getFailedPodcasts () {
-    await this.openConnection();
+    async getPodcastById(id) {
+        const query = `
+            SELECT 
+                p.id, p.archivo, p.obs, p.pudo_subir, p.fecha_procesado, 
+                p.file_id, s.channel 
+            FROM podcasts AS p 
+            JOIN sources AS s ON s.id = p.destino 
+            WHERE p.archivo = ?
+               OR p.archivo LIKE CONCAT(?,'-%')
+        `;
 
-    return new Promise((resolve, reject) => {
-      this.con.query({
-        sql: 'SELECT * FROM `podcasts` WHERE `pudo_subir` = 0',
-        timeout: 40000
-      }, (err, results) => {
-        this.closeConnection();
+        return this.executeQuery(query, [id, id]);
+    }
 
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
-        }
-      });
-    });
-  }
-
-  /**
-     * Get the identifiers for the podcasts
-     * @returns {Promise} The stored podcasts, or error message
+    /**
+     * Retrieves the list of failed podcast uploads.
+     * @returns {Promise<Array>} List of failed uploads.
      */
-  async getStoredPodcasts () {
-    await this.openConnection();
+    async getFailedPodcasts() {
+        const query = 'SELECT * FROM podcasts WHERE pudo_subir = 0';
 
-    return new Promise((resolve, reject) => {
-      this.con.query({
-        sql: 'SELECT id, archivo FROM `podcasts`',
-        timeout: 40000
-      }, (err, results) => {
-        this.closeConnection();
+        return this.executeQuery(query);
+    }
 
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
-        }
-      });
-    });
-  }
+    /**
+     * Retrieves the list of stored podcasts.
+     * @returns {Promise<Array>} List of stored podcasts.
+     */
+    async getStoredPodcasts() {
+        const query = 'SELECT id, archivo FROM podcasts';
 
-  async getChannelId (channel) {
-    await this.openConnection();
+        return this.executeQuery(query);
+    }
 
-    return new Promise((resolve, reject) => {
-      this.con.query({
-        sql: 'SELECT id FROM sources WHERE channel = ?',
-        timeout: 40000,
-        values: [channel]
-      }, (err, results) => {
-        this.closeConnection();
+    /**
+     * Retrieves the channel ID by its name.
+     * @param {string} channel - Channel name.
+     * @returns {Promise<number>} Channel ID.
+     */
+    async getChannelId(channel) {
+        const query = 'SELECT id FROM sources WHERE channel = ?';
+        const rows = await this.executeQuery(query, [channel]);
 
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results[0].id);
-        }
-      });
-    });
-  }
+        return rows[0]?.id || null;
+    }
 };

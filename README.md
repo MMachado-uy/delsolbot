@@ -1,6 +1,6 @@
 # DELSOLBOT
 
-![imagen version node](https://img.shields.io/badge/node-v10.10.0-green.svg "Nodejs")
+![imagen version node](https://img.shields.io/badge/node-v20.0.0-green.svg "Nodejs")
 ![imagen version npm](https://img.shields.io/badge/npm-v6.4.1-green.svg "npm")
 ![GitHub](https://img.shields.io/github/license/mashape/apistatus.svg)
 
@@ -33,7 +33,7 @@ Instructions to clone and run this project in a local environment.
 
 ### Requisitos / Requirements
 
-- Node 10+
+- Node 20+
 - Npm 6.4+
 - MySql
 
