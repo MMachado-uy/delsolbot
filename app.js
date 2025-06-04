@@ -158,7 +158,18 @@ const sendToTelegram = async (feedItem, channelName) => {
         return success;
     } catch (err) {
         logError(`${episodeNumber} Failed to upload. ${err.message ?? err}`);
-        await DB.registerUpload(episodeNumber, err.response?.body?.description ?? err.message, false, '', channel, title, caption, url);
+        const uploadStatus = {
+            archivo: episodeNumber,
+            obs: err.response?.body?.description ?? err.message,
+            exito: false,
+            fileId: '',
+            channel,
+            title: pathToTitle(fileName),
+            caption,
+            url,
+            message_id: ''
+        };
+        await DB.registerUpload(uploadStatus);
 
         throw err;
     }
