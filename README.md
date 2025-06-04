@@ -42,7 +42,8 @@ Instructions to clone and run this project in a local environment.
 [ES]
 
 - Clona este repositorio `$ git clone https://github.com/MMachado-uy/delsolbot.git`
-- Dentro de la carpeta del proyecto ejecuta `$ npm install`
+ - Dentro de la carpeta del proyecto ejecuta `$ npm install`
+ - Ejecuta `$ npm run lint` para comprobar el estilo de código
 - Ejecutar los scripts contenidos en `./database/`
 - Crear un archivo _.env_ con los siguientes parametros:
   - DB
@@ -50,6 +51,8 @@ Instructions to clone and run this project in a local environment.
   - DB_PASS
   - DB_PORT
   - DB_HOST
+  - DB_CONNECTION_LIMIT
+  - DB_CONNECT_TIMEOUT
   - TWITTER_CONSUMER_KEY
   - TWITTER_CONSUMER_SECRET
   - TWITTER_ACCESS_TOKEN_KEY
@@ -57,13 +60,16 @@ Instructions to clone and run this project in a local environment.
   - BOT_TOKEN
   - TEST_CHANNEL
   - ENV
+  - TELEGRAM_THRESHOLD
+  - MAX_DISTANCE_FROM_SILENCE
   - CRON
 - En la raíz del proyecto ejecutar `$ node app.js`
 
 [EN]
 
 - Clone this repo `$ git clone https://github.com/MMachado-uy/delsolbot.git`
-- In the project's folder, run `$ npm install`
+ - In the project's folder, run `$ npm install`
+ - Run `$ npm run lint` to check code style
 - Run the sql scripts in `./database/`
 - Create a _.env_ file with the following entries:
   - DB
@@ -71,6 +77,8 @@ Instructions to clone and run this project in a local environment.
   - DB_PASS
   - DB_PORT
   - DB_HOST
+  - DB_CONNECTION_LIMIT
+  - DB_CONNECT_TIMEOUT
   - TWITTER_CONSUMER_KEY
   - TWITTER_CONSUMER_SECRET
   - TWITTER_ACCESS_TOKEN_KEY
@@ -78,6 +86,8 @@ Instructions to clone and run this project in a local environment.
   - BOT_TOKEN
   - TEST_CHANNEL
   - ENV
+  - TELEGRAM_THRESHOLD
+  - MAX_DISTANCE_FROM_SILENCE
   - CRON
 - To run the script itself, run `$ node app.js`
 
