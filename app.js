@@ -41,7 +41,9 @@ const mainCron = new CronJob(CRON_MAIN, () => {
 }, null);
 
 /**
- * Main Application logic
+ * Main Application logic entry point.
+ * Processes all RSS sources and handles podcast uploads.
+ * @returns {Promise<void>}
  */
 const main = async () => {
     try {
@@ -63,6 +65,11 @@ const main = async () => {
     }
 }
 
+/**
+ * Processes a single RSS feed source.
+ * @param {Object} rssSource - RSS source object with url, channel, nombre.
+ * @returns {Promise<void>}
+ */
 const processFeed = async rssSource => {
     const feed = await getFeed(rssSource.url);
     feed.items.map(item => {
@@ -78,6 +85,12 @@ const processFeed = async rssSource => {
     }
 }
 
+/**
+ * Processes a single RSS feed item (episode).
+ * @param {Object} item - RSS feed item.
+ * @param {string} title - Podcast title.
+ * @returns {Promise<void>}
+ */
 const processItem = async (item, title) => {
     const itemId = getIdFromItem(item);
     debug(`Processing item: ${itemId}`);
@@ -135,10 +148,10 @@ const sendToTelegram = async (feedItem, channelName) => {
                 const track = hadToSplit ? `${episodeNumber}-${i + 1}` : episodeNumber;
                 const currentCaption = hadToSplit ? `(Parte ${i + 1}) ${caption}` : caption;
 
-                await editMetadata(channelName, pathToTitle(episodePath), caption, episodePath, track, imagePath);
+                await editMetadata(channelName, title, caption, episodePath, track, imagePath);
 
-                debug({ episodePath, currentCaption, channel, channelName, title: pathToTitle(episodePath), episodeNumber, forwardId });
-                const telegramResponse = await sendEpisodeToChannel(episodePath, currentCaption, channel, channelName, pathToTitle(episodePath), track, forwardId);
+                debug({ episodePath, currentCaption, channel, channelName, title, episodeNumber, forwardId });
+                const telegramResponse = await sendEpisodeToChannel(episodePath, currentCaption, channel, channelName, title, track, forwardId);
 
                 debug(telegramResponse);
                 debug(`${episodeNumber} Uploaded`);
@@ -146,7 +159,7 @@ const sendToTelegram = async (feedItem, channelName) => {
                 const { file_id } = telegramResponse.result.audio;
                 const { message_id } = telegramResponse.result;
 
-                const uploadStatus = { archivo: track, obs: '', exito: true, fileId: file_id, channel, title: pathToTitle(episodePath), caption, url, message_id };
+                const uploadStatus = { archivo: track, obs: '', exito: true, fileId: file_id, channel, title: title, caption, url, message_id };
                 await DB.registerUpload(uploadStatus);
 
                 success = success && true;
@@ -284,7 +297,6 @@ const sendEpisodeToChannel = async (episodePath, caption, chatId, performer, tit
   
         return data;  
     } catch (error) {
-        // If file is a Read Stream, destroy it
         if (typeof file.destroy === 'function') file.destroy();
         throw error;
     }

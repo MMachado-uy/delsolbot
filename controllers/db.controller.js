@@ -15,7 +15,13 @@ const pool = mysql.createPool({
     database: process.env.DB
 });
 
+/**
+ * Database controller for podcast operations.
+ */
 module.exports = class Db {
+    /**
+     * Initializes a new database controller instance.
+     */
     constructor() {
         this.con = null;
     }
@@ -46,6 +52,15 @@ module.exports = class Db {
     /**
      * Registers a podcast upload in the database.
      * @param {Object} data - Podcast upload data.
+     * @param {string} data.archivo - File name or episode identifier.
+     * @param {string} [data.obs] - Observations or notes.
+     * @param {boolean} data.exito - Upload success status.
+     * @param {string} [data.fileId] - Telegram file ID.
+     * @param {string} [data.channel] - Channel name.
+     * @param {string} [data.title] - Episode title.
+     * @param {string} [data.caption] - Episode caption.
+     * @param {string} [data.url] - Episode URL.
+     * @param {string|number} [data.message_id] - Telegram message ID.
      * @returns {Promise<any>} Insert result.
      */
     async registerUpload({
@@ -82,7 +97,7 @@ module.exports = class Db {
 
     /**
      * Retrieves the RSS sources list.
-     * @returns {Promise<Array>} List of RSS sources.
+     * @returns {Promise<Array<{url: string, channel: string, nombre: string}>>} List of RSS sources.
      */
     async getRssList() {
         const query = 'SELECT url, channel, nombre FROM sources';
@@ -121,7 +136,7 @@ module.exports = class Db {
 
     /**
      * Retrieves the list of stored podcasts.
-     * @returns {Promise<Array>} List of stored podcasts.
+     * @returns {Promise<Array<{id: number, archivo: string}>>} List of stored podcasts.
      */
     async getStoredPodcasts() {
         const query = 'SELECT id, archivo FROM podcasts';
@@ -132,7 +147,7 @@ module.exports = class Db {
     /**
      * Retrieves the channel ID by its name.
      * @param {string} channel - Channel name.
-     * @returns {Promise<number>} Channel ID.
+     * @returns {Promise<number|null>} Channel ID or null if not found.
      */
     async getChannelId(channel) {
         const query = 'SELECT id FROM sources WHERE channel = ?';
