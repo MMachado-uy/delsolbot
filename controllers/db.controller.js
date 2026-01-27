@@ -1,18 +1,16 @@
-require('dotenv').config();
+const config = require("../lib/config");
 
-const { logError,
-    debug
-} = require('../lib/helpers');
+const { logError } = require("../lib/helpers");
 
 const mysql = require('mysql2/promise');
 
 const pool = mysql.createPool({
-    connectionLimit: 100,
-    connectTimeout: 60 * 60 * 1000,
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    database: process.env.DB
+    connectionLimit: config.CONNECTION_LIMIT,
+    connectTimeout: config.CONNECT_TIMEOUT,
+    host: config.DB_HOST,
+    user: config.DB_USER,
+    password: config.DB_PASS,
+    database: config.DB
 });
 
 /**

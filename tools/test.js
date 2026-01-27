@@ -1,5 +1,5 @@
 /* eslint-disable */
-require('dotenv').config()
+const config = require("../lib/config");
 
 const axios = require('axios');
 const fs = require('fs');

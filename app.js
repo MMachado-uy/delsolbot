@@ -1,4 +1,3 @@
-require('dotenv').config();
 
 const path = require('path');
 const fs = require('fs');
@@ -10,6 +9,7 @@ const axios = require('axios');
 
 const DbController = require('./controllers/db.controller');
 const DB = new DbController();
+const config = require("./lib/config");
 const { splitEpisode } = require('./lib/splitter');
 const {
     cleanDownloads,
@@ -21,8 +21,7 @@ const {
     sanitizeContent,
     sanitizeEpisode,
     getFeed,
-    pathToTitle,
-    pause
+    pathToTitle
 } = require('./lib/helpers');
 
 const {
@@ -30,7 +29,7 @@ const {
     TEST_CHANNEL,
     CRON_MAIN,
     NODE_ENV: ENV
-} = process.env;
+} = config;
 const COVER = './assets/cover.jpg';
 const DDIR = './downloads/';
 
@@ -54,7 +53,6 @@ const main = async () => {
             log(`Starting to process ${rssSource.channel}`);
 
             await processFeed(rssSource);
-            await pause(1000);
 
             log(`Finished processing ${rssSource.channel}`);
         }
