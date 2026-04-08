@@ -98,7 +98,13 @@ const processItem = async (item, title) => {
         const stored = await DB.getPodcastById(itemId);
         debug({ stored });
 
-        const priorUploads = stored.filter(r => r.pudo_subir && r.channel !== item.channel);
+        const alreadyUploaded = stored.some(r => r.pudo_subir && r.file_id && r.channel === item.channel);
+        if (alreadyUploaded) {
+            debug(`Skipping ${itemId}: already uploaded to ${item.channel}`);
+            return;
+        }
+
+        const priorUploads = stored.filter(r => r.pudo_subir && r.file_id && r.channel !== item.channel);
         const isForward = priorUploads.length > 0;
 
         if (isForward) item.forwardFiles = priorUploads.map(r => r.file_id);
@@ -133,9 +139,9 @@ const sendToTelegram = async (feedItem, channelName) => {
             const hadMultipleParts = forwardFiles.length > 1;
             let success = true;
             for (const [i, fileId] of forwardFiles.entries()) {
+                const track = hadMultipleParts ? `${episodeNumber}-${i + 1}` : episodeNumber;
+                const currentCaption = hadMultipleParts ? `(Parte ${i + 1}) ${caption}` : caption;
                 try {
-                    const track = hadMultipleParts ? `${episodeNumber}-${i + 1}` : episodeNumber;
-                    const currentCaption = hadMultipleParts ? `(Parte ${i + 1}) ${caption}` : caption;
                     debug(`Forwarding ${track} with file_id: ${fileId}`);
                     const telegramResponse = await sendEpisodeToChannel(null, currentCaption, channel, channelName, title, track, fileId);
                     const { file_id } = telegramResponse.result.audio;
@@ -144,6 +150,7 @@ const sendToTelegram = async (feedItem, channelName) => {
                 } catch (error) {
                     logError(`Error forwarding part ${i + 1} of ${episodeNumber}:`, error);
                     success = false;
+                    await DB.registerUpload({ archivo: track, obs: error.response?.body?.description ?? error.message, exito: false, fileId: '', channelId, title, caption: currentCaption, url, message_id: '' });
                 }
             }
             return success;
