@@ -7,8 +7,8 @@ const { logError,
 const mysql = require('mysql2/promise');
 
 const pool = mysql.createPool({
-    connectionLimit: 100,
-    connectTimeout: 60 * 60 * 1000,
+    connectionLimit: 10,
+    connectTimeout: 30 * 1000,
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASS,
@@ -20,32 +20,23 @@ const pool = mysql.createPool({
  */
 module.exports = class Db {
     /**
-     * Initializes a new database controller instance.
-     */
-    constructor() {
-        this.con = null;
-    }
-
-    /**
      * Executes a database query with provided parameters.
      * @param {string} query - SQL query to execute.
      * @param {Array} params - Parameters for the query.
      * @returns {Promise<any>} Query result.
      */
     async executeQuery(query, params = []) {
+        let con;
         try {
-            this.con = await pool.getConnection();
-            const [rows] = await this.con.execute(query, params);
+            con = await pool.getConnection();
+            const [rows] = await con.execute(query, params);
 
             return rows;
         } catch (err) {
             logError(`Database query failed: ${query} - Params: ${params}`, err);
             throw err;
         } finally {
-            if (this.con) {
-                this.con.release();
-                this.con = null;
-            }
+            if (con) con.release();
         }
     }
 
@@ -56,7 +47,7 @@ module.exports = class Db {
      * @param {string} [data.obs] - Observations or notes.
      * @param {boolean} data.exito - Upload success status.
      * @param {string} [data.fileId] - Telegram file ID.
-     * @param {string} [data.channel] - Channel name.
+     * @param {number|null} [data.channelId] - Numeric ID of the destination channel in sources.
      * @param {string} [data.title] - Episode title.
      * @param {string} [data.caption] - Episode caption.
      * @param {string} [data.url] - Episode URL.
@@ -68,16 +59,15 @@ module.exports = class Db {
         obs = '',
         exito,
         fileId = '',
-        channel = '',
+        channelId = null,
         title = '',
         caption = '',
         url = '',
         message_id = ''
     }) {
-        const channelId = channel ? await this.getChannelId(channel) : null;
         const query = `
-            INSERT INTO podcasts 
-            (archivo, obs, pudo_subir, file_id, destino, title, caption, url, msg_id) 
+            INSERT INTO podcasts
+            (archivo, obs, pudo_subir, file_id, destino, title, caption, url, msg_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
         const params = [
@@ -97,10 +87,10 @@ module.exports = class Db {
 
     /**
      * Retrieves the RSS sources list.
-     * @returns {Promise<Array<{url: string, channel: string, nombre: string}>>} List of RSS sources.
+     * @returns {Promise<Array<{id: number, url: string, channel: string, nombre: string}>>} List of RSS sources.
      */
     async getRssList() {
-        const query = 'SELECT url, channel, nombre FROM sources';
+        const query = 'SELECT id, url, channel, nombre FROM sources';
 
         return this.executeQuery(query);
     }
@@ -112,13 +102,14 @@ module.exports = class Db {
      */
     async getPodcastById(id) {
         const query = `
-            SELECT 
-                p.id, p.archivo, p.obs, p.pudo_subir, p.fecha_procesado, 
-                p.file_id, s.channel 
-            FROM podcasts AS p 
-            JOIN sources AS s ON s.id = p.destino 
+            SELECT
+                p.id, p.archivo, p.obs, p.pudo_subir, p.fecha_procesado,
+                p.file_id, s.channel
+            FROM podcasts AS p
+            JOIN sources AS s ON s.id = p.destino
             WHERE p.archivo = ?
                OR p.archivo LIKE CONCAT(?,'-%')
+            ORDER BY LENGTH(p.archivo), p.archivo
         `;
 
         return this.executeQuery(query, [id, id]);
@@ -142,17 +133,5 @@ module.exports = class Db {
         const query = 'SELECT id, archivo FROM podcasts';
 
         return this.executeQuery(query);
-    }
-
-    /**
-     * Retrieves the channel ID by its name.
-     * @param {string} channel - Channel name.
-     * @returns {Promise<number|null>} Channel ID or null if not found.
-     */
-    async getChannelId(channel) {
-        const query = 'SELECT id FROM sources WHERE channel = ?';
-        const rows = await this.executeQuery(query, [channel]);
-
-        return rows[0]?.id || null;
     }
 };

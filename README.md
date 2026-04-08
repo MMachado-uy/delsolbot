@@ -13,10 +13,10 @@ How not to miss your radio shows using Telegram's integrated media player.
 ## Que es esto? / What is this?
 
 [ES]
-Este script corre un cron job, que en cada ejecución, busca en las fuentes RSS detalladas en la base de datos, busca episodios nuevos y los publica en un canal de Telegram por cada fuente RSS, luego de agregar la metadata correspondiente a cada episodio. Una vez terminado, publica un Tweet con los detalles de lo publicado y un link al audio en Telegram.
+Este script corre un cron job, que en cada ejecución, busca en las fuentes RSS detalladas en la base de datos, busca episodios nuevos y los publica en un canal de Telegram por cada fuente RSS, luego de agregar la metadata correspondiente a cada episodio.
 
 [EN]
-This script runs a cronjob that looks for new episodes in the RSS sources detailed in a database, and then publishes them in a Telegram Channel per RSS source, but only after it edits each audio file's metadata. After it's done, publishes a Tweet with details of the episode and a link to the audio in Telegram.
+This script runs a cronjob that looks for new episodes in the RSS sources detailed in a database, and then publishes them in a Telegram Channel per RSS source, but only after it edits each audio file's metadata.
 
 ## Disclaimer
 
@@ -50,14 +50,10 @@ Instructions to clone and run this project in a local environment.
   - DB_PASS
   - DB_PORT
   - DB_HOST
-  - TWITTER_CONSUMER_KEY
-  - TWITTER_CONSUMER_SECRET
-  - TWITTER_ACCESS_TOKEN_KEY
-  - TWITTER_ACCESS_TOKEN_SECRET
   - BOT_TOKEN
   - TEST_CHANNEL
-  - ENV
-  - CRON
+  - NODE_ENV
+  - CRON_MAIN
 - En la raíz del proyecto ejecutar `$ node app.js`
 
 [EN]
@@ -71,14 +67,10 @@ Instructions to clone and run this project in a local environment.
   - DB_PASS
   - DB_PORT
   - DB_HOST
-  - TWITTER_CONSUMER_KEY
-  - TWITTER_CONSUMER_SECRET
-  - TWITTER_ACCESS_TOKEN_KEY
-  - TWITTER_ACCESS_TOKEN_SECRET
   - BOT_TOKEN
   - TEST_CHANNEL
-  - ENV
-  - CRON
+  - NODE_ENV
+  - CRON_MAIN
 - To run the script itself, run `$ node app.js`
 
 ***Importante: para ejecuciones en ambiente local, redirigir los posteos a un canal de Testing***

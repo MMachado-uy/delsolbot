@@ -18,8 +18,8 @@ const {
     logError,
     getIdFromItem,
     getMedia,
-    sanitizeContent,
     sanitizeEpisode,
+    sanitizeFilename,
     getFeed,
     pathToTitle,
     pause
@@ -67,20 +67,19 @@ const main = async () => {
 
 /**
  * Processes a single RSS feed source.
- * @param {Object} rssSource - RSS source object with url, channel, nombre.
+ * @param {Object} rssSource - RSS source object with id, url, channel, nombre.
  * @returns {Promise<void>}
  */
 const processFeed = async rssSource => {
     const feed = await getFeed(rssSource.url);
-    feed.items.map(item => {
+    feed.items.forEach(item => {
         item.channel = rssSource.channel;
-
-        return item;
+        item.channelId = rssSource.id;
     });
 
     const { title } = feed;
 
-    for await (const item of feed.items) {
+    for (const item of feed.items) {
         await processItem(item, title);
     }
 }
@@ -99,11 +98,10 @@ const processItem = async (item, title) => {
         const stored = await DB.getPodcastById(itemId);
         debug({ stored });
 
-        const isForward = stored?.length &&
-                        stored[0].pudo_subir &&
-                        !stored.some(record => record.channel === item.channel);
+        const priorUploads = stored.filter(r => r.pudo_subir && r.channel !== item.channel);
+        const isForward = priorUploads.length > 0;
 
-        if (isForward) item.forwardFile = stored[0].file_id;
+        if (isForward) item.forwardFiles = priorUploads.map(r => r.file_id);
 
         if (isForward || stored.length === 0) {
             await sendToTelegram(item, title);
@@ -122,25 +120,43 @@ const processItem = async (item, title) => {
  * @returns telegramMessage - see: https://core.telegram.org/bots/api#message
  */
 const sendToTelegram = async (feedItem, channelName) => {
-    const { title, content, link: url, channel, itunes: { image } } = feedItem;
+    const { title, content, link: url, channel, channelId, itunes: { image } } = feedItem;
     const episodeNumber = getIdFromItem(feedItem);
-    const folderName = sanitizeContent(channelName);
+    const folderName = sanitizeFilename(channelName);
     const fileName = `${sanitizeEpisode(title)}.mp3`;
-    let caption = `<b>${title}</b>\n${content}`;
-    let hadToSplit = false;
+    const caption = `<b>${title}</b>\n${content}`;
+    const forwardFiles = feedItem.forwardFiles ?? null;
 
     try {
-        const originalPath = path.join(DDIR, folderName, fileName);
-
-        const forwardId = feedItem.forwardFile ? feedItem.forwardFile : null;
-        const imagePath = await downloadImage(image, folderName);
-
-        if (!forwardId) {
-            await downloadEpisode(url, originalPath, folderName);
+        // Forward path: all parts already exist on Telegram, send each by file_id
+        if (forwardFiles?.length) {
+            const hadMultipleParts = forwardFiles.length > 1;
+            let success = true;
+            for (const [i, fileId] of forwardFiles.entries()) {
+                try {
+                    const track = hadMultipleParts ? `${episodeNumber}-${i + 1}` : episodeNumber;
+                    const currentCaption = hadMultipleParts ? `(Parte ${i + 1}) ${caption}` : caption;
+                    debug(`Forwarding ${track} with file_id: ${fileId}`);
+                    const telegramResponse = await sendEpisodeToChannel(null, currentCaption, channel, channelName, title, track, fileId);
+                    const { file_id } = telegramResponse.result.audio;
+                    const { message_id } = telegramResponse.result;
+                    await DB.registerUpload({ archivo: track, obs: '', exito: true, fileId: file_id, channelId, title, caption: currentCaption, url, message_id });
+                } catch (error) {
+                    logError(`Error forwarding part ${i + 1} of ${episodeNumber}:`, error);
+                    success = false;
+                }
+            }
+            return success;
         }
 
-        let episodePaths = await splitEpisode(path.join(DDIR, folderName, fileName), pathToTitle(fileName));
-        hadToSplit = episodePaths.length > 1;
+        // Fresh upload path: download, split if needed, tag, upload
+        const originalPath = path.join(DDIR, folderName, fileName);
+        const imagePath = await downloadImage(image, folderName);
+
+        await downloadEpisode(url, originalPath, folderName);
+
+        const episodePaths = await splitEpisode(path.join(DDIR, folderName, fileName), pathToTitle(fileName));
+        const hadToSplit = episodePaths.length > 1;
 
         let success = true;
         for (const [i, episodePath] of episodePaths.entries()) {
@@ -150,8 +166,8 @@ const sendToTelegram = async (feedItem, channelName) => {
 
                 await editMetadata(channelName, title, caption, episodePath, track, imagePath);
 
-                debug({ episodePath, currentCaption, channel, channelName, title, episodeNumber, forwardId });
-                const telegramResponse = await sendEpisodeToChannel(episodePath, currentCaption, channel, channelName, title, track, forwardId);
+                debug({ episodePath, currentCaption, channel, channelName, title, episodeNumber });
+                const telegramResponse = await sendEpisodeToChannel(episodePath, currentCaption, channel, channelName, title, track, null);
 
                 debug(telegramResponse);
                 debug(`${episodeNumber} Uploaded`);
@@ -159,11 +175,9 @@ const sendToTelegram = async (feedItem, channelName) => {
                 const { file_id } = telegramResponse.result.audio;
                 const { message_id } = telegramResponse.result;
 
-                const uploadStatus = { archivo: track, obs: '', exito: true, fileId: file_id, channel, title: title, caption, url, message_id };
-                await DB.registerUpload(uploadStatus);
-
-                success = success && true;
+                await DB.registerUpload({ archivo: track, obs: '', exito: true, fileId: file_id, channelId, title, caption, url, message_id });
             } catch (error) {
+                logError(`Error uploading part ${i + 1} of ${episodeNumber}:`, error);
                 success = false;
             }
         }
@@ -171,18 +185,17 @@ const sendToTelegram = async (feedItem, channelName) => {
         return success;
     } catch (err) {
         logError(`${episodeNumber} Failed to upload. ${err.message ?? err}`);
-        const uploadStatus = {
+        await DB.registerUpload({
             archivo: episodeNumber,
             obs: err.response?.body?.description ?? err.message,
             exito: false,
             fileId: '',
-            channel,
+            channelId,
             title: pathToTitle(fileName),
             caption,
             url,
             message_id: ''
-        };
-        await DB.registerUpload(uploadStatus);
+        });
 
         throw err;
     }
@@ -232,9 +245,9 @@ const downloadImage = async (imageUrl, folder) => {
 const editMetadata = async (artist, title, comment, episodePath, track, imagePath = COVER) => {
     try {
         debug(`Started editing metadata for: ${episodePath}`);
-        
+
         const coverBuffer = await fs.promises.readFile(imagePath);
-        
+
         const tags = {
             artist,
             title,
@@ -247,7 +260,7 @@ const editMetadata = async (artist, title, comment, episodePath, track, imagePat
                 imageBuffer: coverBuffer
             }
         };
-        
+
         await NodeID3.write(tags, episodePath);
         debug('Metadata editing completed successfully.');
     } catch (error) {
@@ -265,7 +278,7 @@ const editMetadata = async (artist, title, comment, episodePath, track, imagePat
  * @param {String} performer Name of the Channel
  * @param {String} title Title of the episode
  * @param {String|Number} id The Id of the episode
- * @param {String} fileId Previously uploaded file id. If forwarded
+ * @param {String|null} fileId Previously uploaded file id, or null for a fresh upload
  */
 const sendEpisodeToChannel = async (episodePath, caption, chatId, performer, title, id, fileId = null) => {
     debug(`Sending: ${id}`);
@@ -274,10 +287,10 @@ const sendEpisodeToChannel = async (episodePath, caption, chatId, performer, tit
     const connectionUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendAudio`;
     const destination = ENV === 'prod' ? chatId : TEST_CHANNEL;
 
-    const file = !fileId ? fs.createReadStream(episodePath) : fileId;
+    const file = fileId == null ? fs.createReadStream(episodePath) : null;
 
     const payload = new FormData();
-    payload.append('audio', fileId === null ? file : fileId);
+    payload.append('audio', file ?? fileId);
     payload.append('disable_notification', 'true');
     payload.append('parse_mode', 'html');
     payload.append('caption', caption);
@@ -294,10 +307,10 @@ const sendEpisodeToChannel = async (episodePath, caption, chatId, performer, tit
             maxBodyLength: Infinity,
             headers: { 'Content-Type': 'multipart/form-data' }
         });
-  
-        return data;  
+
+        return data;
     } catch (error) {
-        if (typeof file.destroy === 'function') file.destroy();
+        file?.destroy();
         throw error;
     }
 };
