@@ -25,7 +25,7 @@ _This file contains critical rules and patterns that AI agents must follow when 
 
 ## Technology Stack & Versions
 
-- **Runtime:** Node.js 20.x LTS, CommonJS only (`require`/`module.exports` — no ES modules)
+- **Runtime:** Node.js 24.x LTS, CommonJS only (`require`/`module.exports` — no ES modules). Enforced via `engines.node: ">=24.0.0"` in `package.json`. CI runs on Node 24.x only.
 - **Scheduler:** `cron` ^3.5.0 — use `CronJob` from the `cron` package
 - **HTTP Client:** `axios` ^1.7.9 — used for all HTTP, including Telegram Bot API (no wrapper library)
 - **Telegram API:** Raw HTTP calls to `https://api.telegram.org/bot{BOT_TOKEN}/{method}` via axios; multipart uploads use the `form-data` ^4.0.1 package

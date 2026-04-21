@@ -1,7 +1,7 @@
 # DELSOLBOT
 
-![imagen version node](https://img.shields.io/badge/node-v20.0.0-green.svg "Nodejs")
-![imagen version npm](https://img.shields.io/badge/npm-v6.4.1-green.svg "npm")
+[![CI](https://github.com/MMachado-uy/delsolbot/actions/workflows/ci.yml/badge.svg)](https://github.com/MMachado-uy/delsolbot/actions/workflows/ci.yml)
+![imagen version node](https://img.shields.io/badge/node-v24+-green.svg "Nodejs")
 ![GitHub](https://img.shields.io/github/license/mashape/apistatus.svg)
 
 [ES]
@@ -33,9 +33,9 @@ Instructions to clone and run this project in a local environment.
 
 ### Requisitos / Requirements
 
-- Node 20+
-- Npm 6.4+
+- Node 24+
 - MySql
+- `ffmpeg` and `ffprobe` on PATH (used by the audio splitter)
 
 ### Instalar / Installing
 
