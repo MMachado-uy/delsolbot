@@ -1,5 +1,6 @@
 node_modules/
 downloads/
+coverage/
 .env
 .idea
 log.log
@@ -10,4 +11,8 @@ manual_queue/*
 .DS_Store
 .idea
 .fleet
-package-lock.json
+
+# Tooling artifacts — reinstallable, not part of the project proper.
+# (_bmad-output/ IS kept — those are the actual documents produced.)
+_bmad/
+.claude/

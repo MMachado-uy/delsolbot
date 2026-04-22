@@ -1,8 +1,6 @@
 require('dotenv').config();
 
-const { logError,
-    debug
-} = require('../lib/helpers');
+const { logError } = require('../lib/helpers');
 
 const mysql = require('mysql2/promise');
 
