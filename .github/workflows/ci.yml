@@ -80,7 +80,16 @@ jobs:
           DEPLOY_PM2_NAME: ${{ secrets.DEPLOY_PM2_NAME }}
         run: |
           ssh -i ~/.ssh/id_deploy "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s <<EOF
-            set -euo pipefail
+            set -eo pipefail
+
+            # Non-interactive SSH sessions skip .bashrc, so nvm isn't loaded
+            # automatically and npm/pm2 would resolve to the legacy system
+            # node instead of the nvm-managed Node 24. Source nvm explicitly.
+            export NVM_DIR="\$HOME/.nvm"
+            # shellcheck disable=SC1091
+            [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"
+            nvm use default
+
             cd "${DEPLOY_PATH}"
             git fetch --all --prune
             git reset --hard origin/master
