@@ -6,10 +6,6 @@ on:
   pull_request:
     branches: [master]
 
-# A future deploy job can be added as a downstream dependency of `checks` via
-# `needs: checks` + `if: github.event_name == 'push' && github.ref == 'refs/heads/master'`.
-# Out of MVP scope per PRD Epic 5.
-
 jobs:
   checks:
     name: Lint, test & coverage (Node ${{ matrix.node-version }})
@@ -51,3 +47,44 @@ jobs:
           name: coverage
           path: coverage/
           retention-days: 14
+
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    needs: checks
+    # Only deploy on direct pushes to master (which happens on PR merge).
+    # Pull requests never trigger a deploy.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # Don't cancel an in-flight deploy if a second push arrives; queue instead.
+    # Preserves atomicity of the `git reset + npm ci + pm2 restart` sequence.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    steps:
+      - name: Configure SSH
+        # Load the deploy key into the runner's SSH agent and seed known_hosts
+        # with the production host's live fingerprint. Keys and host live in
+        # GitHub Secrets; see README for the expected secret names.
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Sync code, install, restart pm2
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_PM2_NAME: ${{ secrets.DEPLOY_PM2_NAME }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s <<EOF
+            set -euo pipefail
+            cd "${DEPLOY_PATH}"
+            git fetch --all --prune
+            git reset --hard origin/master
+            npm ci --omit=dev
+            pm2 restart "${DEPLOY_PM2_NAME}"
+            pm2 save
+          EOF
