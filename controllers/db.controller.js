@@ -114,6 +114,31 @@ module.exports = class Db {
     }
 
     /**
+     * Retrieves podcast activity (successes and failures) within a recent
+     * window, joined to the destination channel, for the daily operator
+     * summary. The window is evaluated server-side (NOW() - INTERVAL) so it is
+     * immune to client/DB timezone mismatch.
+     * @param {number} [hours=24] - Look-back window in hours.
+     * @returns {Promise<Array>} Activity rows ordered oldest-first.
+     */
+    async getActivitySince(hours = 24) {
+        // Coerced to an integer (not a placeholder) so it can sit inside the
+        // INTERVAL literal without injection risk — it is never user input.
+        const windowHours = Number.parseInt(hours, 10) || 24;
+        const query = `
+            SELECT
+                p.archivo, p.title, p.obs, p.pudo_subir,
+                p.file_id, p.fecha_procesado, s.channel
+            FROM podcasts AS p
+            JOIN sources AS s ON s.id = p.destino
+            WHERE p.fecha_procesado >= NOW() - INTERVAL ${windowHours} HOUR
+            ORDER BY p.fecha_procesado ASC
+        `;
+
+        return this.executeQuery(query);
+    }
+
+    /**
      * Retrieves the list of failed podcast uploads.
      * @returns {Promise<Array>} List of failed uploads.
      */

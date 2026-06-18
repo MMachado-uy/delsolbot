@@ -214,6 +214,36 @@ describe('controllers/db.controller', () => {
         });
     });
 
+    describe('getActivitySince', () => {
+        it('joins podcasts to sources and filters by a server-side NOW() - INTERVAL window', async () => {
+            mockConnection.execute.mockResolvedValue([[], {}]);
+
+            const db = new Db();
+            await db.getActivitySince(24);
+
+            const [sql, params] = mockConnection.execute.mock.calls[0];
+            const normalized = normalizeSql(sql);
+            expect(normalized).toContain('FROM podcasts AS p');
+            expect(normalized).toContain('JOIN sources AS s ON s.id = p.destino');
+            expect(normalized).toContain('WHERE p.fecha_procesado >= NOW() - INTERVAL 24 HOUR');
+            expect(normalized).toContain('ORDER BY p.fecha_procesado ASC');
+            // Window is an integer literal, not a placeholder → no params.
+            expect(params).toEqual([]);
+        });
+
+        it('defaults to a 24h window and coerces non-integer input safely (no injection)', async () => {
+            mockConnection.execute.mockResolvedValue([[], {}]);
+
+            const db = new Db();
+            await db.getActivitySince('7; DROP TABLE podcasts');
+
+            const [sql] = mockConnection.execute.mock.calls[0];
+            // parseInt('7; DROP...') → 7; the rest is discarded, never reaches SQL.
+            expect(normalizeSql(sql)).toContain('INTERVAL 7 HOUR');
+            expect(sql).not.toMatch(/DROP TABLE/u);
+        });
+    });
+
     describe('getStoredPodcasts', () => {
         it('selects id and archivo from podcasts', async () => {
             mockConnection.execute.mockResolvedValue([[], {}]);
