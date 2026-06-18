@@ -7,10 +7,10 @@ CREATE TABLE IF NOT EXISTS sources (
 
 CREATE TABLE IF NOT EXISTS podcasts (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    archivo VARCHAR(15) NOT NULL,
-    title VARCHAR(120),
+    archivo VARCHAR(64) NOT NULL,
+    title VARCHAR(255),
     caption TEXT,
-    url VARCHAR(120),
+    url VARCHAR(512),
     obs VARCHAR(255),
     pudo_subir BOOLEAN,
     msg_id VARCHAR(20),

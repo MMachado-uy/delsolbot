@@ -25,10 +25,22 @@ const DDIR = './downloads/';
 
 const sendToTelegram = createSendToTelegram({ db: DB, splitEpisode });
 
+// Guard against overlapping ticks: a run with large uploads + retries can exceed
+// the cron interval, and two concurrent main() runs would race on the same
+// episode (duplicate uploads) and let one run's cleanDownloads() delete files
+// the other is mid-upload on. Skip a tick if the previous run is still going.
+let mainRunning = false;
 const mainCron = new CronJob(CRON_MAIN, () => {
-    main().catch(e => {
-        logError(e);
-    });
+    if (mainRunning) {
+        log('Previous run still in progress; skipping this tick');
+
+        return;
+    }
+
+    mainRunning = true;
+    main()
+        .catch(e => logError(e))
+        .finally(() => { mainRunning = false; });
 }, null);
 
 /**

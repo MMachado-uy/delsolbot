@@ -122,9 +122,10 @@ module.exports = class Db {
      * @returns {Promise<Array>} Activity rows ordered oldest-first.
      */
     async getActivitySince(hours = 24) {
-        // Coerced to an integer (not a placeholder) so it can sit inside the
-        // INTERVAL literal without injection risk — it is never user input.
-        const windowHours = Number.parseInt(hours, 10) || 24;
+        // Coerced to a positive integer (not a placeholder) so it can sit inside
+        // the INTERVAL literal without injection risk — it is never user input.
+        const parsed = Number.parseInt(hours, 10);
+        const windowHours = Number.isInteger(parsed) && parsed > 0 ? parsed : 24;
         const query = `
             SELECT
                 p.archivo, p.title, p.obs, p.pudo_subir,
